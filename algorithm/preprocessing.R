@@ -4,9 +4,8 @@
 # Date: 07.04.2020
 
 
-preprocess <- function(x, y, t, unit = "px",
-                       res, dim, dist,
-                       fr, blink = NULL) {
+preprocess <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
+                       sg.order, sg.length) {
   
   require(signal)
   source("algorithm/preprocessing_helper_functions.R")
@@ -72,16 +71,12 @@ preprocess <- function(x, y, t, unit = "px",
   
   # Calculate velocity and acceleration
   
-  x.vel <- sgolayfilt(x.va[valid], m = 1)
-  y.vel <- sgolayfilt(y.va[valid], m = 1)
-  # x.vel <- lead(x.va[valid]) - lag(x.va[valid])
-  # y.vel <- lead(y.va[valid]) - lag(y.va[valid])
+  x.vel <- sgolayfilt(x.va[valid], m = 1, p = sg.order, n = sg.length)
+  y.vel <- sgolayfilt(y.va[valid], m = 1, p = sg.order, n = sg.length)
   vel[valid] <- sqrt(x.vel^2 + y.vel^2) * fr
   
-  x.acc <- sgolayfilt(x.va[valid], m = 2)
-  y.acc <- sgolayfilt(y.va[valid], m = 2)
-  # x.acc <- (lead(x.va[valid]) - x.va[valid]) - (lag(x.va[valid] - x.va[valid]))
-  # y.acc <- (lead(y.va[valid]) - y.va[valid]) - (lag(y.va[valid] - y.va[valid]))
+  x.acc <- sgolayfilt(x.va[valid], m = 2, p = sg.order, n = sg.length)
+  y.acc <- sgolayfilt(y.va[valid], m = 2, p = sg.order, n = sg.length)
   acc[valid] <- sqrt(x.acc^2 + y.acc^2) * fr
   
   valid[valid] <- ifelse(is.na(vel[valid]) | is.na(acc[valid]), F, valid[valid])

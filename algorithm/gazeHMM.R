@@ -5,6 +5,7 @@
 
 
 classify_gaze_data <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
+                               sg.order = 3, sg.length = 5, 
                                nstates, respstart, trstart, instart, sf = c(10, 10),
                                fit.control = em.control(maxit = 5000, random.start = F),
                                min.sac = 0.01) {
@@ -16,7 +17,7 @@ classify_gaze_data <- function(x, y, t, unit = "px", res, dim, dist, fr, blink =
   
   # Preprocessing
   
-  prep <- preprocess(x, y, t, unit, res, dim, dist, fr, blink)
+  prep <- preprocess(x, y, t, unit, res, dim, dist, fr, blink, sg.order, sg.length)
   
   
   # Model classification
