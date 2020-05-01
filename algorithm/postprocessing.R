@@ -4,7 +4,7 @@
 # Date: 20.04.2020
 
 
-postprocess <- function(data, state) { # data frame with dependent variables, vector with state for each observation
+postprocess <- function(data, state, min.sac) { # data frame with dependent variables, vector with sample states, minimum saccade duration
   
   source("algorithm/postprocessing_helper_functions.R")
   
@@ -24,7 +24,7 @@ postprocess <- function(data, state) { # data frame with dependent variables, ve
   
   # Relabel samples
   
-  df <- reclassify(state, data$t)
+  df <- reclassify(state, data$t, min.sac)
   
   label <- df$label
   number <- df$number

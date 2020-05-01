@@ -6,7 +6,7 @@
 
 # Function to retrieve last (different) state
 
-last_state <- function(state, s) {
+last_state <- function(state, s) { # vector with event states, index of current event
   if(state[s-1] != state[s] || (s-1) == 1) {
     
     return(state[s-1])
@@ -19,7 +19,7 @@ last_state <- function(state, s) {
 
 # Function to relabel samples
 
-reclassify <- function(state, t) {
+reclassify <- function(state, t, min.sac) { # vector with samples states, vector with sample timestamps, minimum saccade duration
   
   # Assign labels to events
   
@@ -72,7 +72,7 @@ reclassify <- function(state, t) {
     }
     event[n] <- max(state[number == n])
     
-    if(event[n] == SAC && dur[n] < 0.01 && n > 1) {
+    if(event[n] == SAC && dur[n] < min.sac && n > 1) {
       
       state[number == n] <- last_state(event, n)
       
@@ -135,7 +135,7 @@ reclassify <- function(state, t) {
     }
     event[n] <- max(state[number == n])
     
-    if(event[n] == SAC && dur[n] < 0.01 && n > 1) {
+    if(event[n] == SAC && dur[n] < min.sac && n > 1) {
       
       minDuration <- F
       
@@ -153,7 +153,7 @@ reclassify <- function(state, t) {
     
   } else {
     
-    return(reclassify(state, t))
+    return(reclassify(state, t, min.sac))
     
   }
 }

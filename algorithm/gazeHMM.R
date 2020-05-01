@@ -6,7 +6,8 @@
 
 classify_gaze_data <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
                                nstates, respstart, trstart, instart, sf = c(10, 10),
-                               fit.control = em.control(maxit = 5000, random.start = F)) {
+                               fit.control = em.control(maxit = 5000, random.start = F),
+                               min.sac = 0.01) {
   
   source("algorithm/preprocessing.R")
   source("algorithm/model.R")
@@ -25,7 +26,7 @@ classify_gaze_data <- function(x, y, t, unit = "px", res, dim, dist, fr, blink =
   
   # Postprocessing
   
-  post <- postprocess(prep, model.fit@posterior$state)
+  post <- postprocess(prep, model.fit@posterior$state, min.sac)
   
   
   # Output: Data frame with samples, data frames with events, fitted model
