@@ -179,7 +179,7 @@ setMethod("vMF",
               if(length(pstart) != npar) stop("length of 'pstart' must be ", npar)
               
               parameters$mu <- pstart[1]
-              parameters$kappa <- pstart[2]
+              parameters$kappa <- log(pstart[2])
             }
             
             mod <- new("vMF", parameters = parameters, fixed = fixed, x = x, y = y, npar = npar)
@@ -206,7 +206,7 @@ setMethod("show", "vMF",
 setMethod("dens","vMF",
           function(object) {
             
-            dens <- ifelse(is.na(object@y), 1, dvm(object@y, mu = object@parameters$mu, kappa = object@parameters$kappa))
+            dens <- ifelse(is.na(object@y), 1, dvm(object@y, mu = object@parameters$mu, kappa = exp(object@parameters$kappa)))
             
           }
 )
@@ -279,7 +279,7 @@ setMethod("fit","vMF",
               
               miss <- is.na(y)
               
-              dens <- ifelse(miss, 1, dvm(y, mu = par[1], kappa = par[2]))
+              dens <- ifelse(miss, 1, dvm(y, mu = par[1], exp(kappa = par[2])))
               
               return(-sum(w*log(dens)))
             }
@@ -290,10 +290,9 @@ setMethod("fit","vMF",
             # Optimize weighted ll for von-Mises distribution
             
             fit <- BB::BBoptim(par = init, fn = ll_vMF, y = y, w = w,
-                               lower = c(0, 1e-5), upper = c(pi, Inf), quiet = T)
+                               lower = c(-Inf, -Inf), upper = c(Inf, Inf), quiet = T)
             
             pars <- fit$par
-            names(pars) <- c("mu", "kappa")
             object <- setpars(object,pars)
             
             return(object)
@@ -348,8 +347,8 @@ setMethod("altGamma",
             if(is.null(fixed)) fixed <- as.logical(rep(0,npar))
             if(!is.null(pstart)) {
               if(length(pstart)!=npar) stop("length of 'pstart' must be ",npar)
-              parameters$shape <- pstart[1]
-              parameters$scale <- pstart[2]
+              parameters$shape <- log(pstart[1])
+              parameters$scale <- log(pstart[2])
             }
             mod <- new("altGamma",parameters=parameters,fixed=fixed,x=x,y=y,npar=npar)
             mod
@@ -368,8 +367,8 @@ setMethod("show","altGamma",
 setMethod("dens","altGamma",
           function(object,log=FALSE) {
             
-            dens <- ifelse(is.na(object@y), 1, dgamma(object@y, shape = object@parameters$shape, 
-                                                      scale = object@parameters$scale,log = log))
+            dens <- ifelse(is.na(object@y), 1, dgamma(object@y, shape = exp(object@parameters$shape), 
+                                                      scale = exp(object@parameters$scale),log = log))
             
           }
 )
@@ -428,26 +427,11 @@ setMethod("fit","altGamma",
               
               miss <- is.na(y)
               
-              dens <- ifelse(miss, log(1), dgamma(y, shape = par[1], scale = par[2], log = T))
+              dens <- ifelse(miss, log(1), dgamma(y, shape = exp(par[1]), scale = exp(par[2]), log = T))
               
               return(-sum(w*dens))
             }
             
-            
-            # # Create gradient of weighted log-likelihood for gamma distribution
-            # 
-            # gr_gamma <- function(par, y, w) {
-            #   
-            #   shape <- par[1]; scale <- par[2]
-            #   
-            #   grad.shape <- D(expression(w*log(1/(scale^shape * gamma(shape)) * y^(shape-1) * exp(-(y/scale)))), name = "shape")
-            #   grad.scale <- D(expression(w*log(1/(scale^shape * gamma(shape)) * y^(shape-1) * exp(-(y/scale)))), name = "scale")
-            #   
-            #   gradll.shape <- -sum(eval(grad.shape))
-            #   gradll.scale <- -sum(eval(grad.scale))
-            #   
-            #   return(c(gradll.shape, gradll.scale))
-            # }
             
             init <- c(object@parameters$shape, object@parameters$scale) # start values
             
@@ -455,10 +439,9 @@ setMethod("fit","altGamma",
             # Optimize weighted ll for von-Mises distribution
             
             fit <- BB::BBoptim(par = init, fn = ll_gamma, y = y, w = w,
-                         lower = c(1e-5, 1e-5), upper = c(50, 50), quiet = T)
+                         lower = c(-Inf, -Inf), upper = c(Inf, Inf), quiet = T)
             
             pars <- fit$par
-            names(pars) <- c("shape", "scale")
             object <- setpars(object, pars)
             
             return(object)
