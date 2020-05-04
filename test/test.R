@@ -58,6 +58,28 @@ for (i in 1:length(Eprep.fit.3)) {
 }
 
 
+# Plot bivariate classification 
+
+for (i in 1:length(Eprep.fit.3)) {
+  
+  ggplot(Eprep.fit.3[[i]]$samples, aes(vel, acc, color = as.factor(state))) + 
+    geom_point() + scale_color_discrete(name = "state", labels = c("Fix", "Sac", "PSO")) +
+    ggsave(filename = paste("Eprep_3comp_subj_", i, "_bivariate_vel_acc.png", sep = ""), 
+           width = 6, height = 6)
+  
+  ggplot(Eprep.fit.3[[i]]$samples, aes(vel, angle, color = as.factor(state))) + 
+    geom_point() + scale_color_discrete(name = "state", labels = c("Fix", "Sac", "PSO")) +
+    ggsave(filename = paste("Eprep_3comp_subj_", i, "_bivariate_vel_angle.png", sep = ""), 
+           width = 6, height = 6)
+  
+  ggplot(Eprep.fit.3[[i]]$samples, aes(acc, angle, color = as.factor(state))) + 
+    geom_point() + scale_color_discrete(name = "state", labels = c("Fix", "Sac", "PSO")) +
+    ggsave(filename = paste("Eprep_3comp_subj_", i, "_bivariate_acc_angle.png", sep = ""), 
+           width = 6, height = 6)
+  
+}
+
+
 # Test on dynamic data ----------------------------------------------------
 
 # D2010 data set
@@ -104,4 +126,26 @@ for (i in 1:length(D2010.fit.4)) {
   plot_samples_xy(D2010.fit.4[[i]], from = int[1], to = int[2]) + 
     ggsave(filename = paste("D2010_4comp_subj_", i, "_xy.png", sep = ""), 
            width = 12, height = 6)
+}
+
+
+# Plot bivariate classification
+
+for (i in 1:length(D2010.fit.4)) {
+  
+  ggplot(D2010.fit.4[[i]]$samples, aes(vel, acc, color = as.factor(state))) + 
+    geom_point() + scale_color_discrete(name = "state", labels = c("Fix", "Sac", "PSO")) +
+    ggsave(filename = paste("D2010_4comp_subj_", i, "_bivariate_vel_acc.png", sep = ""), 
+           width = 6, height = 6)
+  
+  ggplot(D2010.fit.4[[i]]$samples, aes(vel, angle, color = as.factor(state))) + 
+    geom_point() + scale_color_discrete(name = "state", labels = c("Fix", "Sac", "PSO")) +
+    ggsave(filename = paste("D2010_4comp_subj_", i, "_bivariate_vel_angle.png", sep = ""), 
+           width = 6, height = 6)
+  
+  ggplot(D2010.fit.4[[i]]$samples, aes(acc, angle, color = as.factor(state))) + 
+    geom_point() + scale_color_discrete(name = "state", labels = c("Fix", "Sac", "PSO")) +
+    ggsave(filename = paste("D2010_4comp_subj_", i, "_bivariate_acc_angle.png", sep = ""), 
+           width = 6, height = 6)
+  
 }
