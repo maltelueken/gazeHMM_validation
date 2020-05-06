@@ -319,7 +319,7 @@ setMethod("simulate", signature(object = "vMF"),
             
             nt <- nrow(object@y)
             
-            sim <- rvm(nt*nsim, mean = object@parameters$mu, k = object@parameters$kappa)
+            sim <- rvm(nt*nsim, mean = object@parameters$mu, k = exp(object@parameters$kappa))
             
             return(as.matrix(sim))
           }
@@ -463,7 +463,7 @@ setMethod("simulate", signature(object = "altGamma"),
             
             nt <- nrow(object@y)
             
-            sim <- rgamma(nt*nsim, shape = object@parameters$shape, scale = object@parameters$scale)
+            sim <- rgamma(nt*nsim, shape = exp(object@parameters$shape), scale = exp(object@parameters$scale))
             
             return(as.matrix(sim))
           }
