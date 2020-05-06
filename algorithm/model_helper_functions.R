@@ -5,8 +5,6 @@
 
 library(depmixS4)
 library(CircStats)
-library(gamlss)
-library(gamlss.dist)
 
 
 # Create response model for uniform distribution --------------------------
@@ -452,5 +450,21 @@ setMethod("predict","altGamma",
           function(object) {
             ret <- object@parameters$shape*object@parameters$scale
             return(ret)
+          }
+)
+
+
+# Define method to simulate
+
+setMethod("simulate", signature(object = "altGamma"),
+          function(object, nsim = 1, seed) {
+            
+            if(!is.null(seed)) set.seed(seed)
+            
+            nt <- nrow(object@y)
+            
+            sim <- rgamma(nt*nsim, shape = object@parameters$shape, scale = object@parameters$scale)
+            
+            return(as.matrix(sim))
           }
 )
