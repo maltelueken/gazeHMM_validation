@@ -3,7 +3,7 @@
 # Author: Malte Lüken
 # Date: 06.05.2020
 
-HMM_simulate <- function(n, nstates, respstart, trstart, instart) {
+HMM_simulate <- function(n, nstates, trueresp, truetr, truein) {
   
   require(depmixS4)
   source("algorithm/model_helper_functions.R")
@@ -16,15 +16,15 @@ HMM_simulate <- function(n, nstates, respstart, trstart, instart) {
   
   # Create response model
   
-  resp <- list(list(altGamma(data$vel, pstart = respstart[["fix"]][["vel"]]),
-                    altGamma(data$acc, pstart = respstart[["fix"]][["acc"]]),
+  resp <- list(list(altGamma(data$vel, pstart = trueresp[["fix"]][["vel"]]),
+                    altGamma(data$acc, pstart = trueresp[["fix"]][["acc"]]),
                     unif(data$angle)))
   
   for (s in 2:nstates) {
     
-    resp[[s]] <- list(altGamma(data$vel, pstart = respstart[[s]][["vel"]]),
-                      altGamma(data$acc, pstart = respstart[[s]][["acc"]]),
-                      vMF(data$angle, pstart = respstart[[s]][["angle"]]))
+    resp[[s]] <- list(altGamma(data$vel, pstart = trueresp[[s]][["vel"]]),
+                      altGamma(data$acc, pstart = trueresp[[s]][["acc"]]),
+                      vMF(data$angle, pstart = trueresp[[s]][["angle"]]))
     
   }
   
@@ -35,14 +35,14 @@ HMM_simulate <- function(n, nstates, respstart, trstart, instart) {
   
   for (s in 1:nstates) {
     
-    trans[[s]] <- transInit(~ 1, nstates = nstates, data = data, pstart = c(trstart[s,]))
+    trans[[s]] <- transInit(~ 1, nstates = nstates, data = data, pstart = c(truetr[s,]))
     
   }
   
   
   # Create initial state model
   
-  init <- transInit(~ 1, ns = nstates, ps = instart, family = multinomial("identity"), data = data.frame(1))
+  init <- transInit(~ 1, ns = nstates, ps = truein, family = multinomial("identity"), data = data.frame(1))
   
   
   # Combine models

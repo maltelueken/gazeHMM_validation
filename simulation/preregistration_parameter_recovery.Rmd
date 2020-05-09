@@ -38,7 +38,7 @@ Where it was possible, we chose the intervals and fixed values for each paramete
 
 ### Sample Size and Noise Variation
 
-In the second part, we will vary the sample size of the generated data and the amount of noise added to it. The model parameters will be set to their fixed values. For models with $k \in \{2, 3, 4\}$ states and sample sizes of $N \in \{500, 2500, 10000\}$, we will generate 100 data sets ($100 \times 3 \times 3 = 900$ recoveries). We chose samples sizes roughly corresponding to small, medium, and large eye-tracking data sets of a single participant and trial. To simulate measurement error, we will add Gaussian white noise with $\mu = 0$ and $\sigma \in [1,5]$ varying between data sets to velocity and acceleration. Values that decrease to zero or below will be set to 0.001. We will add white noise from a von-Mises distribution with $\mu = 0$ and $\kappa \in 1/[0.1,10]$ varying between data sets to angle.
+In the second part, we will vary the sample size of the generated data and the amount of noise added to it. The model parameters will be set to their fixed values. For models with $k \in \{2, 3, 4\}$ states and sample sizes of $N \in \{500, 2500, 10000\}$, we will generate 100 data sets ($100 \times 3 \times 3 = 900$ recoveries). We chose samples sizes roughly corresponding to small, medium, and large eye-tracking data sets of a single participant and trial. To simulate measurement error, we will add Gaussian white noise with $\mu = 0$ and $\sigma \in [1,5]$ varying between data sets to velocity and acceleration. Values that decrease to zero or below will be set to 0.001. To angle, we will add white noise from a von-Mises distribution with $\mu = 0$ and $\kappa \in 1/[0.1,10]$ varying in equidistant steps between data sets.
 
 
 ### Variation of Starting Values
@@ -48,14 +48,18 @@ In the third part, we will increase the variation in the starting values used fo
 
 ### Missing data
 
-In the last part, we will set intervals of the generated data to be missing. The model parameters will be set to the fixed values. For $k \in \{2, 3, 4\}$ states and $n_{miss} \in \{1, 3, 5\}$ intervals, 100 data sets with $N = 2500$ samples will be generated ($100 \times 3 \times 3 = 900$ recoveries). The size of the missing data interval $m \in [1,250]$ samples will vary between the data sets.
+In the last part, we will set intervals of the generated data to be missing. The model parameters will be set to the fixed values. For $k \in \{2, 3, 4\}$ states and $n_{miss} \in \{1, 3, 5\}$ intervals, 100 data sets with $N = 2500$ samples will be generated ($100 \times 3 \times 3 = 900$ recoveries). The size of the missing data interval $m \in [1,250]$ samples will vary in equidistant steps between the data sets.
 
 
 ## Recovery Measures
 
 For each parameter, we will calculate the mean squared error (MSE) between the true and estimated parameter values. Additonally, we will apply a bivariate linear regression  with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval. The MSE and the regression coefficients will serve as descriptive measures for parameter recovery. Lower MSE values, regression intercepts closer to zero, and regression slopes closer to one will be interpreted as better recovery.  
 
-To assess state recovery, we will compute the proportion of states (for all states taken together, not for each state seperately) that have been classified correctly by the model for each generated data set. Higher proportions will be interpreted as better model accuracy. Overall, we require a median accuracy of 0.9 for the model to be satisfactorily accurate.
+To assess state recovery, we will compute the proportion of states (for all states taken together, not for each state seperately) that have been classified correctly by the model for each generated data set. Higher proportions will be interpreted as better model accuracy. Overall, we require a median accuracy of 0.9 for the model to be satisfactorily accurate.  
+
+When a model can not be fitted to a data set, it will be excluded from the recovery. We expect at least 95% of all models to be fitted.
+
+***
 
 Table 1
 
@@ -77,6 +81,8 @@ Table 1
 |Smooth pursuit|Angle|~0|Larsson et al. (2013)|
 
 *Note*. Units are °/s (velocity), °/s^2^ (acceleration), and radians (angle). ~ indicates that the distribution has a peak at this value.   
+
+***
 
 Table 2  
 
