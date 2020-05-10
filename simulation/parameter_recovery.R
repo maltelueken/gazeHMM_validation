@@ -17,14 +17,10 @@ D <- 5
 N <- 2500
 
 
-# Transition probability interval
+# Parameter intervals
 
-aij <- seq(0.01, 0.99, length.out = D)
-
-
-# Response parameter intervals
-
-par.int.true <- cbind(seq(1, 5, length.out = D),
+par.int.true <- cbind(seq(0.01, 0.99, length.out = D),
+                      seq(1, 5, length.out = D),
                       seq(0.1, 0.6, length.out = D),
                       seq(1, 5, length.out = D),
                       seq(0.05, 0.25, length.out = D),
@@ -55,87 +51,382 @@ par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)),
 
 # Parameter indicators
 
-par.states <- c(rep(1, 4), rep(2:4, each = 5))
-par.names <- c(1, 2, 1, 2, rep(c(1, 2, 1, 2, 2), 3))
-par.resps <- c(rep(1:2, each = 2), rep(c(1, 1, 2, 2, 3),  3))
+par.states <- c(0, rep(1, 4), rep(2:4, each = 5))
+par.names <- c(0, 1, 2, 1, 2, rep(c(1, 2, 1, 2, 2), 3))
+par.resps <- c(0, rep(1:2, each = 2), rep(c(1, 1, 2, 2, 3),  3))
 
 
-# Prepare parallel processing
+# Parameter recovery simulation
 
-estimates <- list()
+estimates.1 <- list()
 
-for (p in 1:sum(par.states <= 2)) {
-
-  ncores <- detectCores()
-  clust <- makeCluster(ncores)
-  clusterExport(clust, list("HMM_simulate", "N", "par.fix.true", "par.states", "par.names", "par.resps", "p"))
-  
-  estimates[[p]] <- parLapply(clust, par.int.true[,p], function(x, samples = N, k = 2, par.state = par.states[p], 
-                                                           par.name = par.names[p], par.resp = par.resps[p], 
-                                                           trueResp = par.fix.true) {
+for (ns in 2:4) {
+  for (p in 1:sum(par.states <= ns)) {
     
-    # Set true parameter values
+    # Prepare parallel processing
     
-    trueResp[[par.state]][[par.resp]][par.name] <- x
-    
-    trueIn <- rep(1/k, k)
-    
-    trueTr <- matrix(c(0.9, 0.1, 
-                       0.1, 0.9), nrow = k, ncol = k)
+    ncores <- detectCores()
+    clust <- makeCluster(ncores)
+    clusterExport(clust, list("HMM_simulate", "N", "par.fix.true", "par.states", "par.names", "par.resps", "p", "ns"))
     
     
-    # Simulate data with model
+    # Iterate over intervals
     
-    model <- HMM_simulate(n = N, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
-    
-    model.sim <- simulate(model)
-    
-    class(model.sim) <- "depmix"
-    
-    
-    # Generate and set starting values
-    
-    respStart <- lapply(trueResp, function(x, beta = 1) {
+    estimates.1[[as.character(ns)]][[p]] <- parLapply(clust, par.int.true[,p], function(x, samples = N, k = ns, 
+                                                                                        par.state = par.states[p], 
+                                                                                        par.name = par.names[p], 
+                                                                                        par.resp = par.resps[p], 
+                                                                                        trueResp = par.fix.true, 
+                                                                                        seed = 123) {
       
-      lapply(x, function(y) {
+      # Set true parameter values
+      
+      if(par.name > 0 && par.resp > 0) {
         
-        vec <- log(c(rgamma(1, shape = 3, scale = y[1]), rgamma(1, shape = 3, scale = y[2])))
-        # vec <- log(y)
+        trueResp[[par.state]][[par.resp]][par.name] <- x
         
-        return(vec) 
+        trueTr <- matrix(c(0.9, 0.1, 
+                           0.1, 0.9), nrow = k, ncol = k)
+      } else {
+        
+        trueTr <- matrix(NA, nrow = k, ncol = k)
+        
+        diag(trueTr) <- x
+        
+        trueTr[is.na(trueTr)] <- (1-x)/(k-1)
+      }
+      
+      trueIn <- rep(1/k, k)
+      
+      
+      # Simulate data with model
+      
+      model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
+      
+      model.sim <- simulate(model, seed = seed)
+      
+      class(model.sim) <- "depmix"
+      
+      
+      # Generate and set starting values
+      
+      respStart <- lapply(trueResp, function(x) {
+        
+        lapply(x, function(y) {
+          
+          set.seed(seed)
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
+          
+          return(vec) 
+        })
       })
+      
+      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
+      respStart[["sac"]][["angle"]][1] <- 0
+      respStart[["pso"]][["angle"]][1] <- pi
+      respStart[["sp"]][["angle"]][1] <- 0
+      
+      inStart <- trueIn
+      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      
+      start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
+      
+      names(start) <- NULL
+      
+      model.start <- setpars(model.sim, start)
+      
+      
+      # Fit model
+      
+      model.fit <- try(fit(model.start, emc = em.control(maxit = 5000, random.start = F)))
+      
+      
+      # Calculate accuracy
+      
+      acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      
+      output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
+      
+      return(output)
     })
     
-    respStart[["fix"]][["angle"]] <- c(0, 2*pi)
-    respStart[["sac"]][["angle"]][1] <- 0
-    respStart[["pso"]][["angle"]][1] <- pi
-    respStart[["sp"]][["angle"]][1] <- 0
+    stopCluster(clust)
     
-    inStart <- trueIn
-    trStart <- logit(matrix(1/k, nrow = k, ncol = k))
-    
-    start <- c(inStart, trStart, unlist(respStart)[1:12])
-    
-    model.start <- setpars(model.sim, start)
-    
-    model.fit <- try(fit(model.start, emc = em.control(maxit = 5000, random.start = F)))
-    
-    acc <- try(mean(model.sim@states == model.fit@posterior$state))
-    
-    output <- list(pars.true = getpars(model), pars.start = getpars(model.start), 
-                   start = unlist(respStart)[1:12], pars.est = model.fit, accuracy = acc)
-    
-    return(output)
-  })
-  
-  stopCluster(clust)
-  
+  }
 }
 
-exp(summary(estimates[[2]]))
+#beepr::beep(sound = 3)
 
-di <- lapply(list(u = list("1" = 1, "2" = 2), p = list(3, 4)), function(x) {lapply(x, function(y) {print(names(x))})})
 
-ma <- logit(matrix(0.5, 2, 2))
+# Part 2 ------------------------------------------------------------------
 
-exp(ma)/(1+exp(ma))
+# Global parameters
+
+D <- 5
+N <- c(500, 2500, 10000)
+
+
+# Noise intervals
+
+noise.sigma.int <- seq(1, 5, length.out = D)
+noise.kappa.int <- 1/seq(0.1, 10, length.out = D)
+
+
+# Fixed response parameter values
+
+par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
+                     sac = list(vel = c(3, 15), acc = c(3, 3), angle = c(0, 1)),
+                     pso = list(vel = c(3, 3), acc = c(2, 2), angle = c(pi, 1)),
+                     sp = list(vel = c(3, 1.5), acc = c(3, 0.15), angle = c(0, 1)))
+
+
+# Parameter recovery simulation
+
+estimates.2 <- list()
+
+for (ns in 2:4) {
+  for (ss in N) {
+    
+    # Prepare parallel processing
+    
+    ncores <- detectCores()
+    clust <- makeCluster(ncores)
+    clusterExport(clust, list("HMM_simulate", "D", "par.fix.true", "noise.sigma.int", "noise.kappa.int", "ss", "ns"))
+    
+    
+    # Iterate over intervals
+    
+    estimates.2[[as.character(ns)]][[as.character(ss)]] <- parLapply(clust, 1:D, function(x, samples = ss, k = ns, 
+                                                                                          noise.sigma = noise.sigma.int,
+                                                                                          noise.kappa = noise.kappa.int,
+                                                                                          trueResp = par.fix.true, seed = 123) {
+      
+      # Set true parameter values
+      
+      trueTr <- matrix(c(0.9, 0.1, 
+                         0.1, 0.9), nrow = k, ncol = k)
+      
+      trueIn <- rep(1/k, k)
+      
+      
+      # Simulate data with model
+      
+      model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
+      
+      model.sim <- simulate(model, seed = seed)
+      
+      class(model.sim) <- "depmix"
+      
+      
+      # Add noise to data
+      
+      # set.seed(seed)
+
+      noise.angle <- rnorm(ntimes(model.sim), 0, noise.kappa[x])
+      
+      gamma_noise <- function(x, noise) {
+        
+        #set.seed(seed + which(x %in% y))
+        
+        return(rgamma(1, shape = 3, scale = x/2*noise))
+      }
+      
+      for (s in 1:nstates(model.sim)) {
+          
+        model.sim@response[[s]][[1]]@y <- as.matrix(apply(model.sim@response[[s]][[1]]@y, 1, 
+                                                    gamma_noise, noise = noise.sigma[x]), ncol = 1)
+        model.sim@response[[s]][[2]]@y <- as.matrix(apply(model.sim@response[[s]][[2]]@y, 1, 
+                                                    gamma_noise, noise = noise.sigma[x]), ncol = 1)
+        model.sim@response[[s]][[3]]@y <- model.sim@response[[s]][[3]]@y + noise.angle
+        
+      }
+      
+      
+      # Generate and set starting values
+      
+      respStart <- lapply(trueResp, function(x) {
+        
+        lapply(x, function(y) {
+          
+          set.seed(seed)
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
+          
+          return(vec) 
+        })
+      })
+      
+      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
+      respStart[["sac"]][["angle"]][1] <- 0
+      respStart[["pso"]][["angle"]][1] <- pi
+      respStart[["sp"]][["angle"]][1] <- 0
+      
+      inStart <- trueIn
+      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      
+      start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
+      
+      names(start) <- NULL
+      
+      model.start <- setpars(model.sim, start)
+      
+      
+      # Fit model
+      
+      model.fit <- try(fit(model.start, emc = em.control(maxit = 5000, random.start = F)))
+      
+      
+      # Calculate accuracy
+      
+      acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      
+      output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
+      
+      return(output)
+    })
+    
+    stopCluster(clust)
+    
+  }
+}
+
+#beepr::beep(sound = 3)
+
+
+# Part 4 ------------------------------------------------------------------
+
+# Global parameters
+
+D <- 5
+N <- 2500
+nmiss <- c(1, 3, 5)
+
+
+# Missing data interval
+
+miss.int <- floor(seq(1, 200, length.out = D))
+
+
+# Fixed response parameter values
+
+par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
+                     sac = list(vel = c(3, 15), acc = c(3, 3), angle = c(0, 1)),
+                     pso = list(vel = c(3, 3), acc = c(2, 2), angle = c(pi, 1)),
+                     sp = list(vel = c(3, 1.5), acc = c(3, 0.15), angle = c(0, 1)))
+
+
+# Parameter recovery simulation
+
+estimates.4 <- list()
+
+for (ns in 2:4) {
+  for (ms in nmiss) {
+    
+    # Prepare parallel processing
+    
+    ncores <- detectCores()
+    clust <- makeCluster(ncores)
+    clusterExport(clust, list("HMM_simulate", "N", "par.fix.true", "miss.int", "ns", "ms"))
+    
+    
+    # Iterate over intervals
+    
+    estimates.4[[as.character(ns)]][[as.character(ms)]] <- parLapply(clust, miss.int, function(x, samples = N, k = ns, 
+                                                                                          nint = ms,
+                                                                                          trueResp = par.fix.true, seed = 123) {
+      
+      # Set true parameter values
+      
+      trueTr <- matrix(c(0.9, 0.1, 
+                         0.1, 0.9), nrow = k, ncol = k)
+      
+      trueIn <- rep(1/k, k)
+      
+      
+      # Simulate data with model
+      
+      model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
+      
+      model.sim <- simulate(model, seed = seed)
+      
+      class(model.sim) <- "depmix"
+      
+      
+      # Set intervals of data to missing
+      
+      na <- numeric(ntimes(model.sim))
+      pos <- 1:ntimes(model.sim)
+      
+      while(mean(na == 0) > 1-((nint*x)/ntimes(model.sim))) {
+        
+        na <- numeric(ntimes(model.sim))
+        
+        for (i in 1:nint) {
+          
+          st <- sample(pos[na == 0 & pos <= max(pos)-x], 1)
+          
+          na[st:(st+x)] <- i
+          
+        }
+      }
+        
+        
+      for (s in 1:nstates(model.sim)) {
+        
+        model.sim@response[[s]][[1]]@y[na > 0,] <- NA
+        model.sim@response[[s]][[2]]@y[na > 0,] <- NA
+        model.sim@response[[s]][[3]]@y[na > 0,] <- NA
+        
+      }
+      
+      
+      # Generate and set starting values
+      
+      respStart <- lapply(trueResp, function(x) {
+        
+        lapply(x, function(y) {
+          
+          set.seed(seed)
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
+          
+          return(vec) 
+        })
+      })
+      
+      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
+      respStart[["sac"]][["angle"]][1] <- 0
+      respStart[["pso"]][["angle"]][1] <- pi
+      respStart[["sp"]][["angle"]][1] <- 0
+      
+      inStart <- trueIn
+      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      
+      start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
+      
+      names(start) <- NULL
+      
+      model.start <- setpars(model.sim, start)
+      
+      
+      # Fit model
+      
+      model.fit <- try(fit(model.start, emc = em.control(maxit = 5000, random.start = F)))
+      
+      
+      # Calculate accuracy
+      
+      acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      
+      output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = model.fit, accuracy = acc)
+      
+      return(output)
+    })
+    
+    stopCluster(clust)
+    
+  }
+}
+
+#beepr::beep(sound = 3)
