@@ -3,17 +3,32 @@
 # Author: Malte Lüken
 # Date: 06.05.2020
 
+
+# Global parameters -------------------------------------------------------
+
 library(depmixS4)
 library(parallel)
 source("simulation/model_simulation.R")
 source("algorithm/model_helper_functions.R")
 
 
-# Part 1 ------------------------------------------------------------------
-
-# Global parameters
+# Number of data sets to be generated
 
 D <- 5
+
+
+# Default response parameter values
+
+par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
+                     sac = list(vel = c(3, 15), acc = c(3, 3), angle = c(0, 1)),
+                     pso = list(vel = c(3, 3), acc = c(2, 2), angle = c(pi, 1)),
+                     sp = list(vel = c(3, 1.5), acc = c(3, 0.15), angle = c(0, 1)))
+
+
+# Part 1 ------------------------------------------------------------------
+
+# Sample size
+
 N <- 2500
 
 
@@ -39,14 +54,6 @@ par.int.true <- cbind(seq(0.01, 0.99, length.out = D),
                       seq(1, 3, length.out = D),
                       seq(1, 3, length.out = D),
                       1/seq(0.1, 10, length.out = D))
-
-
-# Fixed response parameter values
-
-par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
-                     sac = list(vel = c(3, 15), acc = c(3, 3), angle = c(0, 1)),
-                     pso = list(vel = c(3, 3), acc = c(2, 2), angle = c(pi, 1)),
-                     sp = list(vel = c(3, 1.5), acc = c(3, 0.15), angle = c(0, 1)))
 
 
 # Parameter indicators
@@ -76,8 +83,7 @@ for (ns in 2:4) {
                                                                                         par.state = par.states[p], 
                                                                                         par.name = par.names[p], 
                                                                                         par.resp = par.resps[p], 
-                                                                                        trueResp = par.fix.true, 
-                                                                                        seed = 123) {
+                                                                                        trueResp = par.fix.true) {
       
       # Set true parameter values
       
@@ -103,7 +109,7 @@ for (ns in 2:4) {
       
       model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
       
-      model.sim <- simulate(model, seed = seed)
+      model.sim <- simulate(model)
       
       class(model.sim) <- "depmix"
       
@@ -113,8 +119,6 @@ for (ns in 2:4) {
       respStart <- lapply(trueResp, function(x) {
         
         lapply(x, function(y) {
-          
-          set.seed(seed)
           
           vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
           
@@ -156,14 +160,15 @@ for (ns in 2:4) {
   }
 }
 
-#beepr::beep(sound = 3)
+beepr::beep(sound = 1)
+
+save("estimates.1", file = "simulation/part1.Rdata")
 
 
 # Part 2 ------------------------------------------------------------------
 
-# Global parameters
+# Sample size
 
-D <- 5
 N <- c(500, 2500, 10000)
 
 
@@ -171,14 +176,6 @@ N <- c(500, 2500, 10000)
 
 noise.sigma.int <- seq(1, 5, length.out = D)
 noise.kappa.int <- 1/seq(0.1, 10, length.out = D)
-
-
-# Fixed response parameter values
-
-par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
-                     sac = list(vel = c(3, 15), acc = c(3, 3), angle = c(0, 1)),
-                     pso = list(vel = c(3, 3), acc = c(2, 2), angle = c(pi, 1)),
-                     sp = list(vel = c(3, 1.5), acc = c(3, 0.15), angle = c(0, 1)))
 
 
 # Parameter recovery simulation
@@ -200,7 +197,7 @@ for (ns in 2:4) {
     estimates.2[[as.character(ns)]][[as.character(ss)]] <- parLapply(clust, 1:D, function(x, samples = ss, k = ns, 
                                                                                           noise.sigma = noise.sigma.int,
                                                                                           noise.kappa = noise.kappa.int,
-                                                                                          trueResp = par.fix.true, seed = 123) {
+                                                                                          trueResp = par.fix.true) {
       
       # Set true parameter values
       
@@ -214,20 +211,16 @@ for (ns in 2:4) {
       
       model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
       
-      model.sim <- simulate(model, seed = seed)
+      model.sim <- simulate(model)
       
       class(model.sim) <- "depmix"
       
       
       # Add noise to data
-      
-      # set.seed(seed)
 
       noise.angle <- rnorm(ntimes(model.sim), 0, noise.kappa[x])
       
       gamma_noise <- function(x, noise) {
-        
-        #set.seed(seed + which(x %in% y))
         
         return(rgamma(1, shape = 3, scale = x/2*noise))
       }
@@ -248,8 +241,6 @@ for (ns in 2:4) {
       respStart <- lapply(trueResp, function(x) {
         
         lapply(x, function(y) {
-          
-          set.seed(seed)
           
           vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
           
@@ -291,29 +282,125 @@ for (ns in 2:4) {
   }
 }
 
-#beepr::beep(sound = 3)
+beepr::beep(sound = 1)
+
+save("estimates.2", file = "simulation/part2.Rdata")
+
+
+# Part 3 ------------------------------------------------------------------
+
+# Sample size
+
+N <- 2500
+
+
+# Noise variability
+
+b.int <- 1:3
+
+
+# Parameter recovery simulation
+
+estimates.3 <- list()
+
+for (ns in 2:4) {
+  for (b in b.int) {
+    
+    # Prepare parallel processing
+    
+    ncores <- detectCores()
+    clust <- makeCluster(ncores)
+    clusterExport(clust, list("HMM_simulate", "N", "D", "par.fix.true", "ns", "b"))
+    
+    
+    # Iterate over intervals
+    
+    estimates.3[[as.character(ns)]][[as.character(b)]] <- parLapply(clust, 1:D, function(x, samples = N, k = ns, B = b,
+                                                                                               trueResp = par.fix.true) {
+      
+      # Set true parameter values
+      
+      trueTr <- matrix(c(0.9, 0.1, 
+                         0.1, 0.9), nrow = k, ncol = k)
+      
+      trueIn <- rep(1/k, k)
+      
+      
+      # Simulate data with model
+      
+      model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
+      
+      model.sim <- simulate(model)
+      
+      class(model.sim) <- "depmix"
+      
+      
+      # Generate and set starting values
+      
+      respStart <- lapply(trueResp, function(x) {
+        
+        lapply(x, function(y) {
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = (y[1]/2)*B), rgamma(1, shape = 3, scale = (y[2]/2)*B)))
+          
+          return(vec) 
+        })
+      })
+      
+      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
+      respStart[["sac"]][["angle"]][1] <- 0
+      respStart[["pso"]][["angle"]][1] <- pi
+      respStart[["sp"]][["angle"]][1] <- 0
+      
+      inStart <- trueIn
+      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      
+      start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
+      
+      names(start) <- NULL
+      
+      model.start <- setpars(model.sim, start)
+      
+      
+      # Fit model
+      
+      model.fit <- try(fit(model.start, emc = em.control(maxit = 5000, random.start = F)))
+      
+      
+      # Calculate accuracy
+      
+      acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      
+      output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
+      
+      return(output)
+    })
+    
+    stopCluster(clust)
+    
+  }
+}
+
+beepr::beep(sound = 1)
+
+save("estimates.3", file = "simulation/part3.Rdata")
 
 
 # Part 4 ------------------------------------------------------------------
 
-# Global parameters
+# Sample size
 
-D <- 5
 N <- 2500
+
+
+# Number of missing data intervals
+
 nmiss <- c(1, 3, 5)
 
 
-# Missing data interval
+# Length of missing data interval
 
 miss.int <- floor(seq(1, 200, length.out = D))
-
-
-# Fixed response parameter values
-
-par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
-                     sac = list(vel = c(3, 15), acc = c(3, 3), angle = c(0, 1)),
-                     pso = list(vel = c(3, 3), acc = c(2, 2), angle = c(pi, 1)),
-                     sp = list(vel = c(3, 1.5), acc = c(3, 0.15), angle = c(0, 1)))
 
 
 # Parameter recovery simulation
@@ -334,7 +421,7 @@ for (ns in 2:4) {
     
     estimates.4[[as.character(ns)]][[as.character(ms)]] <- parLapply(clust, miss.int, function(x, samples = N, k = ns, 
                                                                                           nint = ms,
-                                                                                          trueResp = par.fix.true, seed = 123) {
+                                                                                          trueResp = par.fix.true) {
       
       # Set true parameter values
       
@@ -348,7 +435,7 @@ for (ns in 2:4) {
       
       model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
       
-      model.sim <- simulate(model, seed = seed)
+      model.sim <- simulate(model)
       
       class(model.sim) <- "depmix"
       
@@ -387,8 +474,6 @@ for (ns in 2:4) {
         
         lapply(x, function(y) {
           
-          set.seed(seed)
-          
           vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
           
           return(vec) 
@@ -419,7 +504,7 @@ for (ns in 2:4) {
       
       acc <- try(mean(model.sim@states == model.fit@posterior$state))
       
-      output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = model.fit, accuracy = acc)
+      output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
       
       return(output)
     })
@@ -429,4 +514,6 @@ for (ns in 2:4) {
   }
 }
 
-#beepr::beep(sound = 3)
+beepr::beep(sound = 1)
+
+save("estimates.4", file = "simulation/part4.Rdata")

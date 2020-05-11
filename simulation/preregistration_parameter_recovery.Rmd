@@ -1,6 +1,9 @@
 ---
-title: "gazeHMM: Parameter recovery simulation"
-author: "Malte Lüken, Simon Kucharsky, & Ingmar Visser"
+title: "Preregistration: Estimating the Parameter Recovery of the Hidden Markov Model in gazeHMM"
+author: |
+ | Malte Lüken, Simon Kucharsky, & Ingmar Visser
+ |
+ | University of Amsterdam, Department of Psychology
 affiliation: "University of Amsterdam"
 date: "`r format(Sys.Date(), '%d.%m.%Y')`"
 output: pdf_document
@@ -15,7 +18,7 @@ In general, gazeHMM consists of three steps: First, the raw gaze data is preproc
 
 The HMM estimates non-observable states that have generated the data (CITE). In the context of eye-tracking, each state corresponds to an eye movement event. In gazeHMM, the model can have between two and four states. State one always corresponds to fixations, state two always to saccades, state three to PSOs, and state four to smooth pursuits. Moreover, the HMM is multivariate but conditionally independent on the states. Thus, it has three independent response models for every state describing velocity, acceleration, and angle. The velocity and acceleration response models for all four states use two-parameter gamma distributions (shape and scale parametrization). The angle response model for the fixation state uses a uniform distribution, while the other three states use a two-parameter von-Mises distribution (mean and concentration parametrization) to describe angle. Both the transition model and the initial state model use a multinomial distribution (with the logit and the identity link function, respectively). Note that no covariates are included in the model, only intercepts for the parameters are estimated.  
 
-The HMM is implemented in R (CITE) using the package depmixS4 (CITE). An expectation-maximization algorithm (with a maximum of 5000 iterations) estimates the parameters given the hidden states, which are estimated through the Viterbi algorithm (CITE). The parameters of each response model (except for the uniform distribution) are estimated through maximum likelihood with a spectral projected gradient method (CITE) and Barzilai-Borwein step lengths (CITE) as implemented in the package BB (CITE). 
+The HMM is implemented in R (CITE) using the package depmixS4 (CITE). An expectation-maximization algorithm (maximum iterations: 5000, relative tolerance: 1e-08) estimates the parameters given the hidden states, which are estimated through the Viterbi algorithm (CITE). The parameters of each response model (except for the uniform distribution) are estimated through maximum likelihood with a spectral projected gradient method (CITE) and Barzilai-Borwein step lengths (CITE) as implemented in the package BB (CITE). 
 
 
 # Parameter Recovery
@@ -25,60 +28,60 @@ To estimate parameter recovery of the HMM, it will repeatedly generate data with
 
 ## Starting values
 
-The HMM will always start with a uniform distribution to estimate the initial state and state transition probabilities. To generate random starting values for the estimation of shape, scale, and concentration parameters, we will use gamma distributions with the true parameter as the shape parameter and a scale parameter of $\beta = 1$. The gamma distributions ensure that the starting values will be positive. Mean parameters of the von-Mises distribution will always start at their true value.
+The HMM will always start with a uniform distribution to estimate the initial state and state transition probabilities. To generate random starting values for the estimation of shape, scale, and concentration parameters, we will use gamma distributions with a shape parameter of $\alpha_{start}=3$ and $\beta_{start}=\psi_{true}/2$ with $\psi_{true}$ being the true value of the parameter to be estimated. This setup ensures that the starting values are positive, their distribution is moderately skewed, and the mode of the their distributions equals the true parameter value. Mean parameters of the von-Mises distribution will always start at their true value.
 
 
 ## Design
 ### Parameter Variation
 
-The simulation study will be divided into four parts. In the first part, we will vary the parameters of the HMM. For models with $k \in \{2, 3, 4\}$ states, $q \in \{10, 15, 20\}$ parameters will be varied respectively. For each parameter, the HMM will generate 100 data sets with $N = 2500$ samples and the parameter varied in a specified interval in equidistant steps. This will result in $100 \times (10+15+20) = 4500$ recoveries. Only one parameter will be varied at once, the other parameters will be set to their fixed values. We will not manipulate the initial state probabilities because these are usually irrelevant in the context of eye movement classification. For the transition probabilities, we will only vary the probabilities for staying in the same state (diagonals of the tranistion matrix) simultaneously to reduce the complexity of the simulation. The left probability mass will be split evenly between the probabilites for switching to a different state (per row of the transition matrix). Moreover, we will not modify the mean parameters of the von-Mises distribution: As location parameters, they do not alter the shape of the distribution and they are necessary features for the HMM to distinguish between different states.  
+The simulation study will be divided into four parts. In the first part, we will vary the parameters of the HMM. For models with $k \in \{2, 3, 4\}$ states, $q \in \{10, 15, 20\}$ parameters will be varied respectively. For each parameter, the HMM will generate 100 data sets with $N = 2500$ samples and the parameter varied in a specified interval in equidistant steps. This will result in $100 \times (10+15+20) = 4500$ recoveries. Only one parameter will be varied at once, the other parameters will be set to their default values. We will not manipulate the initial state probabilities because these are usually irrelevant in the context of eye movement classification. For the transition probabilities, we will only vary the probabilities for staying in the same state (diagonals of the tranistion matrix) simultaneously to reduce the complexity of the simulation. The left probability mass will be split evenly between the probabilites for switching to a different state (per row of the transition matrix). Moreover, we will not modify the mean parameters of the von-Mises distribution: As location parameters, they do not alter the shape of the distribution and they are necessary features for the HMM to distinguish between different states.  
 
-Where it was possible, we chose the intervals and fixed values for each parameter based on reported ranges for eye movement events in the literature. Otherwise, intervals and fixed values were chosen according to theoretical reasons and based on insights from data used to develop the model. Table 1 shows the theoretical ranges for each event and Table 2 shows the intervals and fixed values for each parameter in the simulation. Parameters were divided by 10 (compared to the reported ranges) to improve fitting of the gamma distributions. We will set the intervals for shape parameters of the gamma distribution for all events to [1,5] to examine how skewness influences the recovery (shape values above 5 approximate a symmetric distribution). The scale parameters will be set so that the respective distribution will match the ranges reported in the literature. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they will be varied on the inverse scale. 
+Where it was possible, we chose the intervals and default values for each parameter based on reported ranges for eye movement events in the literature. Otherwise, intervals and default values were chosen according to theoretical reasons and based on insights from data used to develop the model. Table 1 shows the assumed ranges for each event and Table 2 shows the intervals and default values for each parameter in the simulation. Parameters were divided by 10 (compared to the reported ranges) to improve fitting of the gamma distributions. We will set the intervals for shape parameters of the gamma distribution for all events to [1,5] to examine how skewness influences the recovery (shape values above 5 approximate a symmetric distribution). The scale parameters will be set so that the respective distribution will match the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they will be varied on the inverse scale. 
 
 
 ### Sample Size and Noise Variation
 
-In the second part, we will vary the sample size of the generated data and the amount of noise added to it. The model parameters will be set to their fixed values. For models with $k \in \{2, 3, 4\}$ states and sample sizes of $N \in \{500, 2500, 10000\}$, we will generate 100 data sets ($100 \times 3 \times 3 = 900$ recoveries). We chose samples sizes roughly corresponding to small, medium, and large eye-tracking data sets of a single participant and trial. To simulate measurement error, we will add Gaussian white noise with $\mu = 0$ and $\sigma \in [1,5]$ varying between data sets to velocity and acceleration. Values that decrease to zero or below will be set to 0.001. To angle, we will add white noise from a von-Mises distribution with $\mu = 0$ and $\kappa \in 1/[0.1,10]$ varying between data sets. $\sigma$ and $\kappa$ will vary simultaneously in equidistant steps in their intervals.
+In the second part, we will vary the sample size of the generated data and the amount of noise added to it. The model parameters will be set to their default values. For models with $k \in \{2, 3, 4\}$ states and sample sizes of $N \in \{500, 2500, 10000\}$, we will generate 100 data sets ($100 \times 3 \times 3 = 900$ recoveries). We chose samples sizes roughly corresponding to small, medium, and large eye-tracking data sets of a single participant and trial. To simulate noise, we will replace response values $y$ per sample with draws from a gamma distribution with $\alpha_{noise} = 3$ and $\beta_{noise}=(y/2)\tau_{noise}$ with $\tau_{noise} \in [1,5]$ varying between data sets to velocity and acceleration. This procedure ensures that velocity and acceleration values remain positive and are drawn from moderately skewed distributions with modes equal to the original values. To angle, we will add white noise from a von-Mises distribution with $\mu_{noise} = 0$ and $\kappa_{noise} \in 1/[0.1,10]$ varying between data sets. $\tau_{noise}$ and $\kappa_noise$ will vary simultaneously in equidistant steps in their intervals.
 
 
 ### Variation of Starting Values
 
-In the third part, we will increase the variation in the starting values used for parameter estimation. The model parameters will be set to the fixed values. For the shape, scale, and concentration parameters, we will simultaneously increase the scale parameters of the starting value gamma distributions: For $k \in \{2, 3, 4\}$ states and $\beta \in \{2, 4, 8\}$, 100 data sets with $N = 2500$ samples will be generated each ($100 \times 3 \times 3 = 900$ recoveries).
+In the third part, we will increase the variation in the starting values used for parameter estimation. The model parameters will be set to their default values. For the shape, scale, and concentration parameters, we will simultaneously increase the scale parameters of the starting value gamma distributions: For $k \in \{2, 3, 4\}$ states and $\beta_{start} = (\psi_{true}/2)\tau_{start}$ with $\tau_{start} \in \{1, 2, 3\}$, each 100 data sets with $N = 2500$ samples will be generated ($100 \times 3 \times 3 = 900$ recoveries).
 
 
 ### Missing data
 
-In the last part, we will set intervals of the generated data to be missing. The model parameters will be set to the fixed values. For $k \in \{2, 3, 4\}$ states and $n_{miss} \in \{1, 3, 5\}$ intervals, 100 data sets with $N = 2500$ samples will be generated ($100 \times 3 \times 3 = 900$ recoveries). The size of the missing data interval $m \in [1,250]$ samples will vary in equidistant steps between the data sets.
+In the last part, we will set intervals of the generated data to be missing. The model parameters will be set to their default values. For $k \in \{2, 3, 4\}$ states and $m \in \{1, 3, 5\}$ intervals, 100 data sets with $N = 2500$ samples will be generated ($100 \times 3 \times 3 = 900$ recoveries). The size of the missing data interval $l \in [1,200]$ samples will vary in equidistant steps between the data sets.
 
 
-## Recovery Measures
+## Recovery Analysis
 
-For each parameter, we will calculate the mean squared error (MSE) between the true and estimated parameter values. Additonally, we will apply a bivariate linear regression  with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval. The MSE and the regression coefficients will serve as descriptive measures for parameter recovery. Lower MSE values, regression intercepts closer to zero, and regression slopes closer to one will be interpreted as better recovery.  
+For each parameter, we will calculate the mean squared error (MSE) between the true and estimated parameter values. Additonally, we will apply a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval. The MSE and the regression coefficients will serve as descriptive measures for parameter recovery. Lower MSE values, regression intercepts closer to zero, and regression slopes closer to one will be interpreted as better recovery.  
 
-To assess state recovery, we will compute the proportion of states (for all states taken together, not for each state seperately) that have been classified correctly by the model for each generated data set. Higher proportions will be interpreted as better model accuracy. Overall, we require a median accuracy of 0.9 for the model to be satisfactorily accurate.  
+To assess state recovery, we will compute the proportion of states (for all states taken together, not for each state seperately) that have been classified correctly by the model for each generated data set. Higher proportions will be interpreted as better model accuracy.
 
-When a model can not be fitted to a data set, it will be excluded from the recovery. We expect at least 95% of all models to be fitted.
+When a model can not be fitted to a data set, it will be excluded from the recovery.
 
 ***
 
 Table 1
 
-*Theoretical ranges of response variables used to generate parameter values*
+*Assumed ranges of response variables used to generate parameter values*
 
-|Event|Resp. variable|Range|Reference|
-|-----|--------------|-----|---------|
-|Fixation|Velocity|<30|Larsson et al. (2013)|
-|Fixation|Acceleration|<15|-|
-|Fixation|Angle|uniform|-|
-|Saccade|Velocity|30-500|Larsson et al. (2013)|
-|Saccade|Acceleration|10-250|-|
-|Saccade|Angle|~0|Pekkanen & Lappi (2017)|
-|PSO|Velocity|20-100|Larsson et al. (2013)|
-|PSO|Acceleration|10-90|-|
-|PSO|Angle|~$\pi$|Pekkanen & Lappi (2017)|
-|Smooth pursuit|Velocity|<100|Larsson et al. (2013)|
-|Smooth pursuit|Acceleration|<15|-|
-|Smooth pursuit|Angle|~0|Larsson et al. (2013)|
+|Event|Resp. variable|Range|
+|-----|--------------|-----|
+|Fixation|Velocity|<30|
+|Fixation|Acceleration|<10|
+|Fixation|Angle|uniform|
+|Saccade|Velocity|50-1000|
+|Saccade|Acceleration|10-300|
+|Saccade|Angle|~0|
+|PSO|Velocity|20-100|
+|PSO|Acceleration|10-90|
+|PSO|Angle|~$\pi$|
+|Smooth pursuit|Velocity|<100|
+|Smooth pursuit|Acceleration|<15|
+|Smooth pursuit|Angle|~0|
 
 *Note*. Units are °/s (velocity), °/s^2^ (acceleration), and radians (angle). ~ indicates that the distribution has a peak at this value.   
 
@@ -90,32 +93,32 @@ Table 2
 
 |State|Parameter|Interval|Fixed|Description|
 |-----|---------|--------|-----|-----------|
-|1-4|$p_i^+$|-|$1/k$|Initial state probability for starting in state *i*|
+|1-4|$\rho_i^*$|-|$1/k$|Initial state probability for starting in state *i*|
 |1-4|$a_{i=j}$|[.01,.99]|0.9|Transition probability for staying in the previous state *i*|
 |1-4|$a_{i \neq j}$|$(1-a_{i=j})/(k-1)$|$0.1/(k-1)$|Transition probability for switching to from state *i* to a different state *j*|
 |1|$\alpha_{vel}$|[1,5]|3|Shape parameter of the velocity gamma distribution|
 |1|$\beta_{vel}$|[0.1,0.6]|0.35|Scale parameter of the velocity gamma distribution|
 |1|$\alpha_{acc}$|[1,5]|3|Shape parameter of the acceleration gamma distribution|
 |1|$\beta_{acc}$|[0.05,0.25]|0.15|Scale parameter of the acceleration gamma distribution|
-|1|$a^+$|-|0|Minimum of the uniform distribution|
-|1|$b^+$|-|$2\pi$|Maximum of the uniform distribution|
+|1|$min^*$|-|0|Minimum of the uniform distribution|
+|1|$max^*$|-|$2\pi$|Maximum of the uniform distribution|
 |2|$\alpha_{vel}$|[1,5]|3||
 |2|$\beta_{vel}$|[5,25]|15||
 |2|$\alpha_{acc}$|[1,5]|3||
 |2|$\beta_{acc}$|[1,5]|3||
-|2|$\mu^+$|-|0|Mean parameter of the von-Mises distribution|
+|2|$\mu^*$|-|0|Mean parameter of the von-Mises distribution|
 |2|$\kappa$|$1/[0.1,10]$|1|Concentration parameter of the von Mises distribution
 |3|$\alpha_{vel}$|[1,5]|3||
 |3|$\beta_{vel}$|[1,5]|3||
 |3|$\alpha_{acc}$|[1,3]|2||
 |3|$\beta_{acc}$|[1,3]|2||
-|3|$\mu^+$|-|$\pi$||
+|3|$\mu^*$|-|$\pi$||
 |3|$\kappa$|$1/[0.1,10]$|1||
 |4|$\alpha_{vel}$|[1,5]|3||
 |4|$\beta_{vel}$|[1,2]|1.5||
 |4|$\alpha_{acc}$|[1,5]|3||
 |4|$\beta_{acc}$|[0.05,0.25]|0.15||
-|4|$\mu^+$|-|0||
+|4|$\mu^*$|-|0||
 |4|$\kappa$|$1/[0.1,10]$|1||
 
-*Note*. Parameters marked with $^+$ will not be varied but always set to their fixed value. *k* is the number of states in the model.
+*Note*. Parameters marked with $^*$ will not be varied but always set to their default values. *k* is the number of states in the model.
