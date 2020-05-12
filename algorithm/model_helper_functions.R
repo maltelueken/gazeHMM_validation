@@ -194,7 +194,7 @@ setMethod("show", "vMF",
             cat("Model of type vMF\n")
             cat("Parameters: \n")
             cat("mu: ", object@parameters$mu, "\n")
-            cat("kappa: ", object@parameters$kappa, "\n")
+            cat("kappa: ", exp(object@parameters$kappa), "\n")
           }
 )
 
@@ -357,8 +357,8 @@ setMethod("show","altGamma",
           function(object) {
             cat("Model of type altGamma (see ?altGammamlss for details) \n")
             cat("Parameters: \n")
-            cat("shape: ", object@parameters$shape, "\n")
-            cat("scale: ", object@parameters$scale, "\n")
+            cat("shape: ", exp(object@parameters$shape), "\n")
+            cat("scale: ", exp(object@parameters$scale), "\n")
           }
 )
 
