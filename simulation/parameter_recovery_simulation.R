@@ -8,6 +8,7 @@
 
 library(depmixS4)
 library(parallel)
+library(tidyverse)
 source("simulation/model_simulation.R")
 source("algorithm/model_helper_functions.R")
 
@@ -74,7 +75,7 @@ for (ns in 2:4) {
     
     ncores <- detectCores()
     clust <- makeCluster(ncores)
-    clusterExport(clust, list("HMM_simulate", "N", "par.fix.true", "par.states", "par.names", "par.resps", "p", "ns"))
+    clusterExport(clust, list("HMM_simulate", "str_detect", "N", "par.fix.true", "par.states", "par.names", "par.resps", "p", "ns"))
     
     
     # Iterate over intervals
@@ -132,7 +133,8 @@ for (ns in 2:4) {
       respStart[["sp"]][["angle"]][1] <- 0
       
       inStart <- trueIn
-      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      trStart <- matrix(1/k, nrow = k, ncol = k)
+      trStart <- apply(trStart, 1, model.sim@transition[[1]]@family$linkfun, base = model.sim@transition[[1]]@family$base)
       
       start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
       
@@ -149,6 +151,9 @@ for (ns in 2:4) {
       # Calculate accuracy
       
       acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      
+      
+      # Backtransform parameters
       
       output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
       
@@ -254,7 +259,8 @@ for (ns in 2:4) {
       respStart[["sp"]][["angle"]][1] <- 0
       
       inStart <- trueIn
-      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      trStart <- matrix(1/k, nrow = k, ncol = k)
+      trStart <- apply(trStart, 1, model.sim@transition[[1]]@family$linkfun, base = model.sim@transition[[1]]@family$base)
       
       start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
       
@@ -353,7 +359,8 @@ for (ns in 2:4) {
       respStart[["sp"]][["angle"]][1] <- 0
       
       inStart <- trueIn
-      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      trStart <- matrix(1/k, nrow = k, ncol = k)
+      trStart <- apply(trStart, 1, model.sim@transition[[1]]@family$linkfun, base = model.sim@transition[[1]]@family$base)
       
       start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
       
@@ -486,7 +493,8 @@ for (ns in 2:4) {
       respStart[["sp"]][["angle"]][1] <- 0
       
       inStart <- trueIn
-      trStart <- logit(matrix(1/k, nrow = k, ncol = k))
+      trStart <- matrix(1/k, nrow = k, ncol = k)
+      trStart <- apply(trStart, 1, model.sim@transition[[1]]@family$linkfun, base = model.sim@transition[[1]]@family$base)
       
       start <- c(inStart, trStart, unlist(respStart)[1:(6*k)])
       
