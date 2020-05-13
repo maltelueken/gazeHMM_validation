@@ -78,17 +78,18 @@ mlogit
 #backtrans(estimates.1$`3`[[1]][[3]]$pars.est)
 
 
-# Calculate MSE
+# Calculate normalized root mean square deviation
 
-mse <- list()
+rmsd <- list()
 
 for (part in 1:4) {
   
-  mse[[part]] <- lapply(get(paste("estimates.", part, sep = "")), function(x) {
+  rmsd[[part]] <- lapply(get(paste("estimates.", part, sep = "")), function(x) {
     lapply(x, function(y) {
       sqerr <- lapply(y, function(z) {
         
-        err <- try((backtrans(z$pars.true) - backtrans(z$pars.est))^2)
+        err <- try(((backtrans(z$pars.est) - backtrans(z$pars.true))/
+                      ifelse(backtrans(z$pars.true) == 0, 2*pi, backtrans(z$pars.true)))^2)
         
         if(is.numeric(err)) {
           
@@ -110,12 +111,24 @@ for (part in 1:4) {
       nms <- names(sqerr[[1]])
 
       pars <- matrix(unlist(sqerr), nrow = rows, byrow = T)
-
-      msqerr <- apply(pars, 2, mean, na.rm = T)
-
+      
+      msqerr <- apply(pars, 2, median, na.rm = T)
+      
       names(msqerr) <- nms
-
-      return(msqerr)
+      
+      rmsqerr <- sqrt(msqerr)
+      
+      # parstrue <- lapply(y, function(z) {backtrans(z$pars.true)})
+      # 
+      # parstruemat <- matrix(unlist(parstrue), nrow = rows, byrow = T)
+      # 
+      # meantrue <- apply(parstruemat, 2, mean, na.rm = T)
+      # 
+      # meantrue <- ifelse(meantrue == 0, 2*pi, meantrue)
+      # 
+      # print(rmsqerr/meantrue)
+      
+      return(rmsqerr)
     })
   })
 }
@@ -123,8 +136,8 @@ for (part in 1:4) {
 
 # Display MSE in data frame
 
-mse.data <- lapply(mse, function(x) lapply(x, as.data.frame))
-mse.data <- lapply(mse.data, function(x) lapply(x, function(y) {as.data.frame(t(as.matrix(y)))}))
+rmsd.data <- lapply(rmsd, function(x) lapply(x, as.data.frame))
+rmsd.data <- lapply(rmsd.data, function(x) lapply(x, function(y) {as.data.frame(t(as.matrix(y)))}))
 
 
 # Calculate regression weights for transition probabilities
@@ -179,7 +192,7 @@ regw.tr <- lapply(get("estimates.1"), function(x) {
     return(out)
   })
 
-  regweights <- lapply(df, function(z) {
+  reg <- lapply(df, function(z) {
 
     lmfit <- lm(est ~ true, data = z)
 
@@ -228,10 +241,19 @@ regw.resp <- lapply(get("estimates.1"), function(x) {
     return(out)
   })
 
-  regweights <- lapply(df, function(z) {
+  reg <- lapply(df, function(z) {
 
     lmfit <- lm(est ~ true, data = z)
 
-    return(coef(lmfit))
+    return(lmfit)
   })
 })
+
+
+# Plot MSE
+
+lapply(mse.data, function(x) { lapply(x, function(y) {
+  
+  ggplot(data = y)
+  
+})})

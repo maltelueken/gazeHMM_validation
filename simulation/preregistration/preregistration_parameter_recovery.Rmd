@@ -8,8 +8,7 @@ affiliation: "University of Amsterdam"
 date: "`r format(Sys.Date(), '%d.%m.%Y')`"
 csl: "apa.csl"
 bibliography: "gazeHMM_prereg.bib"
-output: 
-  pdf_document
+output: pdf_document
 ---
 
 In this document, we are preregistering a simulation study to estimate the parameter recovery of a hidden Markov model (HMM) which is part of our recently developed algorithm gazeHMM. The purpose of this algorithm is to classify eye movements into distinct events. These events include fixations, saccades, and optionally postsaccadic oscillations (PSOs) and smooth pursuits. The full algorithm will be available on GitHub (www.github.com/maltelueken/gazeHMM) upon publication.
@@ -39,7 +38,7 @@ The HMM will always start with a uniform distribution to estimate the initial st
 
 The simulation study will be divided into four parts. In the first part, we will vary the parameters of the HMM. For models with $k \in \{2, 3, 4\}$ states, $q \in \{10, 15, 20\}$ parameters will be varied respectively. For each parameter, the HMM will generate 100 data sets with $N = 2500$ samples and the parameter varied in a specified interval in equidistant steps. This will result in $100 \times (10+15+20) = 4500$ recoveries. Only one parameter will be varied at once, the other parameters will be set to their default values. All parameters of the HMM will be estimated freely (i.e., there are no fixed parameters in the model). We will not manipulate the initial state probabilities because these are usually irrelevant in the context of eye movement classification. For the transition probabilities, we will only simultaneously vary the probabilities for staying in the same state (diagonals of the tranistion matrix) to reduce the complexity of the simulation. The left over probability mass will be split evenly between the probabilites for switching to a different state (per row of the transition matrix). Moreover, we will not modify the mean parameters of the von-Mises distributions: As location parameters, they do not alter the shape of the distribution and they are necessary features for the HMM to distinguish between different states.  
 
-Where it was possible, we chose the intervals and default values for each parameter based on reported ranges for eye movement events in the literature. Otherwise, intervals and default values were chosen according to theoretical reasons and based on insights from data used to develop the model. Table 1 shows the assumed ranges for each event and Table 2 shows the intervals and default values for each parameter in the simulation. Parameters were divided by 10 (compared to the reported ranges) to improve fitting of the gamma distributions. We will set the intervals for shape parameters of the gamma distribution for all events to [1,5] to examine how skewness influences the recovery (shape values above 5 approach a symmetric distribution). The scale parameters will be set so that the respective distribution will match the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they will be varied on the inverse scale. 
+Where it was possible, we chose the intervals and default values for each parameter based on reported ranges for eye movement events in the literature. Otherwise, intervals and default values were chosen according to theoretical reasons and based on insights from data used to develop the model. Table 1 shows the assumed ranges for each event and Table 2 shows the intervals and default values for each parameter in the simulation. Parameters were divided by 10 (compared to the reported ranges) to improve fitting of the gamma distributions. We will set the intervals for shape parameters of the gamma distribution for all events to [1,5] to examine how skewness influences the recovery (shape values above five approach a symmetric distribution). The scale parameters will be set so that the respective distribution will match the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they will be varied on the inverse scale. 
 
 
 ### Sample Size and Noise Variation
@@ -59,9 +58,12 @@ In the last part, we will set intervals of the generated data to be missing. The
 
 ## Recovery Analysis
 
-For each parameter, we will calculate the mean squared error (MSE) between the true and estimated parameter values. Additonally, we will apply a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval. The MSE and the regression coefficients will serve as descriptive measures for parameter recovery. Lower MSE values, regression intercepts closer to zero, and regression slopes closer to one will be interpreted as better recovery.  
+For each parameter, we will calculate the root median square proportion deviation [RMSPD; analogous to root median square percentage errors, see @Hyndman2006] between the true and estimated parameter values: $$RMSPD = \sqrt{Med((\frac{\psi_{true}-\psi_{est}}{\psi_{true}})^2)}.$$
+We will treat $RMSPD < 0.1$ as good, $0.1 \le RMSPD < 0.5$ as moderate, and $RMSPD \ge 5$ as bad recovery of a parameter. By taking the median, we will reduce the influence of potential outliers in the estimation and using proportions will enable us to compare RMSPD values across parameters and data sets.  
 
-To assess state recovery, we will compute the proportion of states (for all states taken together, not for each state seperately) that have been classified correctly by the model for each generated data set. Higher proportions will be interpreted as better model accuracy.
+Additionally, we will apply a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval. Regression slopes closer to one will indicate that the model better captures parameter change. Regression intercepts different from zero will reflect bias in parameter estimation.   
+
+To assess state recovery, we will compute Cohen's kappa (for all states taken together, not for each state seperately) as a measure of agreement between true and estimated states for each generated data set. Higher kappa values will be interpreted as better model accuracy. We will adopt the ranges proposed by @Landis1977 to interpret kappa values.
 
 When a model can not be fitted to a data set, it will be excluded from the recovery.
 
@@ -69,7 +71,7 @@ When a model can not be fitted to a data set, it will be excluded from the recov
 
 Table 1
 
-*Assumed ranges of response variables used to generate parameter values*
+*Assumed Ranges of Response Variables Used to Generate Parameter Values*
 
 |Event|Resp. variable|Range|
 |-----|--------------|-----|
@@ -92,9 +94,9 @@ Table 1
 
 Table 2  
 
-*HMM parameter values for generating the data*
+*HMM Parameter Values for Generating the Data*
 
-|State|Parameter|Interval|Fixed|Description|
+|State|Parameter|Interval|Default|Description|
 |-----|---------|--------|-----|-----------|
 |1-4|$\rho_i^*$|-|$1/k$|Initial state probability for starting in state *i*|
 |1-4|$a_{i=j}$|[.01,.99]|0.9|Transition probability for staying in the previous state *i*|
