@@ -21,9 +21,9 @@ D <- 5
 # Default response parameter values
 
 par.fix.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
-                     sac = list(vel = c(3, 15), acc = c(3, 3), angle = c(0, 1)),
-                     pso = list(vel = c(3, 3), acc = c(2, 2), angle = c(pi, 1)),
-                     sp = list(vel = c(3, 1.5), acc = c(3, 0.15), angle = c(0, 1)))
+                     sac = list(vel = c(3, 10), acc = c(3, 3), angle = c(0, 1)),
+                     pso = list(vel = c(3, 1), acc = c(3, 3), angle = c(pi, 1)),
+                     sp = list(vel = c(3, 1), acc = c(3, 0.15), angle = c(0, 1)))
 
 
 # Part 1 ------------------------------------------------------------------
@@ -41,19 +41,19 @@ par.int.true <- cbind(seq(0.01, 0.99, length.out = D),
                       seq(1, 5, length.out = D),
                       seq(0.05, 0.25, length.out = D),
                       seq(1, 5, length.out = D),
-                      seq(5, 25, length.out = D),
+                      seq(5, 15, length.out = D),
                       seq(1, 5, length.out = D),
                       seq(1, 5, length.out = D),
                       1/seq(0.1, 10, length.out = D),
                       seq(1, 5, length.out = D),
+                      seq(0.5, 1.5, length.out = D),
                       seq(1, 5, length.out = D),
                       seq(1, 5, length.out = D),
-                      seq(1, 3, length.out = D),
                       1/seq(0.1, 10, length.out = D),
                       seq(1, 5, length.out = D),
+                      seq(0.5, 1.5, length.out = D),
                       seq(1, 5, length.out = D),
-                      seq(1, 3, length.out = D),
-                      seq(1, 3, length.out = D),
+                      seq(0.05, 0.25, length.out = D),
                       1/seq(0.1, 10, length.out = D))
 
 
