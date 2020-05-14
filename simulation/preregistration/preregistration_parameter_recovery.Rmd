@@ -18,7 +18,7 @@ In general, gazeHMM consists of three steps: First, the raw gaze data is preproc
 
 # Model Description
 
-The HMM estimates non-observable states that have generated the data [@Visser2019]. In the context of eye-tracking, each state corresponds to an eye movement event. In gazeHMM, the model can have between two and four states. State one always corresponds to fixations, state two always to saccades, state three to PSOs, and state four to smooth pursuits. Moreover, the HMM is multivariate but conditionally independent on the states. Thus, it has three independent response models for every state describing velocity, acceleration, and angle. The velocity and acceleration response models for all four states use two-parameter gamma distributions (shape and scale parametrization). The angle response model for the fixation state uses a uniform distribution, while the other three states use a two-parameter von-Mises distribution (mean and concentration parametrization) to describe angle. Both the transition model and the initial state model use a multinomial distribution (with the logit and the identity link function, respectively). Note that no covariates are included in the model, only intercepts for the parameters are estimated.  
+The HMM estimates non-observable states that have generated the data [@Visser2019]. In the context of eye-tracking, each state corresponds to an eye movement event. In gazeHMM, the model can have between two and four states. State one always corresponds to fixations, state two always to saccades, state three to PSOs, and state four to smooth pursuits. Moreover, the HMM is multivariate but conditionally independent on the states. Thus, every state has three independent response models describing velocity, acceleration, and angle. The velocity and acceleration response models for all four states use two-parameter gamma distributions (shape and scale parametrization). The angle response model for the fixation state uses a uniform distribution, while the other three states use a two-parameter von-Mises distribution (mean and concentration parametrization) to describe angle. Both the transition model and the initial state model use a multinomial distribution (with the logit and the identity link function, respectively). Note that no covariates are included in the model, only intercepts for the parameters are estimated.  
 
 The HMM is implemented in R [version: 3.6.3; @RCoreTeam2020] using the package depmixS4 [@Visser2010]. An expectation-maximization algorithm [maximum iterations: 5000, relative tolerance: 1e-08; @Dempster1977; @McLachlan1997] estimates the parameters given the hidden states, which are estimated through the Viterbi algorithm [@Viterbi1967; @ForneyJr1973]. The parameters of each response model (except for the uniform distribution) are estimated through maximum likelihood with a spectral projected gradient method [@Birgin2000] and Barzilai-Borwein step lengths [@Barzilai1988] as implemented in the package BB [@Varadhan2009]. 
 
@@ -38,7 +38,7 @@ The HMM will always start with a uniform distribution to estimate the initial st
 
 The simulation study will be divided into four parts. In the first part, we will vary the parameters of the HMM. For models with $k \in \{2, 3, 4\}$ states, $q \in \{10, 15, 20\}$ parameters will be varied respectively. For each parameter, the HMM will generate 100 data sets with $N = 2500$ samples and the parameter varied in a specified interval in equidistant steps. This will result in $100 \times (10+15+20) = 4500$ recoveries. Only one parameter will be varied at once, the other parameters will be set to their default values. All parameters of the HMM will be estimated freely (i.e., there are no fixed parameters in the model). We will not manipulate the initial state probabilities because these are usually irrelevant in the context of eye movement classification. For the transition probabilities, we will only simultaneously vary the probabilities for staying in the same state (diagonals of the tranistion matrix) to reduce the complexity of the simulation. The left over probability mass will be split evenly between the probabilites for switching to a different state (per row of the transition matrix). Moreover, we will not modify the mean parameters of the von-Mises distributions: As location parameters, they do not alter the shape of the distribution and they are necessary features for the HMM to distinguish between different states.  
 
-Where it was possible, we chose the intervals and default values for each parameter based on reported ranges for eye movement events in the literature. Otherwise, intervals and default values were chosen according to theoretical reasons and based on insights from data used to develop the model. Table 1 shows the assumed ranges for each event and Table 2 shows the intervals and default values for each parameter in the simulation. Parameters were divided by 10 (compared to the reported ranges) to improve fitting of the gamma distributions. We will set the intervals for shape parameters of the gamma distribution for all events to [1,5] to examine how skewness influences the recovery (shape values above five approach a symmetric distribution). The scale parameters will be set so that the respective distribution will match the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they will be varied on the inverse scale. 
+We define approximate ranges for each response variable and will choose true parameter intervals and default values so that they will produces samples that roughly correspond to these ranges. Table 1 shows the assumed ranges for each event and Table 2 shows the intervals and default values for each parameter in the simulation. Parameters will be scaled down by factor 10 (compared to the reported ranges) to improve fitting of the gamma distributions. We will set the intervals for shape parameters of the gamma distribution for all events to [1,5] to examine how skewness influences the recovery (shape values above five approach a symmetric distribution). The scale parameters will be set so that the respective distribution will approximately match the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they will be varied on the inverse scale. 
 
 
 ### Sample Size and Noise Variation
@@ -58,12 +58,12 @@ In the last part, we will set intervals of the generated data to be missing. The
 
 ## Recovery Analysis
 
-For each parameter, we will calculate the root median square proportion deviation [RMSPD; analogous to root median square percentage errors, see @Hyndman2006] between the true and estimated parameter values: $$RMSPD = \sqrt{Med((\frac{\psi_{true}-\psi_{est}}{\psi_{true}})^2)}.$$
-We will treat $RMSPD < 0.1$ as good, $0.1 \le RMSPD < 0.5$ as moderate, and $RMSPD \ge 5$ as bad recovery of a parameter. By taking the median, we will reduce the influence of potential outliers in the estimation and using proportions will enable us to compare RMSPD values across parameters and data sets.  
+For each parameter, we will calculate the root median square proportion deviation [RMdSPD; analogous to root median square percentage errors, see @Hyndman2006] between the true and estimated parameter values: $$RMdSPD = \sqrt{Med((\frac{\psi_{true}-\psi_{est}}{\psi_{true}})^2)}.$$
+We will treat $RMdSPD < 0.1$ as good, $0.1 \le RMdSPD < 0.5$ as moderate, and $RMdSPD \ge 5$ as bad recovery of a parameter. By taking the median, we will reduce the influence of potential outliers in the estimation and using proportions will enable us to compare RMdSPD values across parameters and data sets.  
 
-Additionally, we will apply a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval. Regression slopes closer to one will indicate that the model better captures parameter change. Regression intercepts different from zero will reflect bias in parameter estimation.   
+Additionally, we will apply a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval in Part 1. Regression slopes closer to one will indicate that the model better captures parameter change. Regression intercepts different from zero will reflect a bias in parameter estimation.   
 
-To assess state recovery, we will compute Cohen's kappa (for all states taken together, not for each state seperately) as a measure of agreement between true and estimated states for each generated data set. Higher kappa values will be interpreted as better model accuracy. We will adopt the ranges proposed by @Landis1977 to interpret kappa values.
+To assess state recovery, we will compute Cohen's kappa (for all events taken together, not for each event separately) as a measure of agreement between true and estimated states for each generated data set. Higher kappa values will be interpreted as better model accuracy. We will adopt the ranges proposed by @Landis1977 to interpret kappa values.
 
 When a model can not be fitted to a data set, it will be excluded from the recovery.
 
@@ -71,7 +71,7 @@ When a model can not be fitted to a data set, it will be excluded from the recov
 
 Table 1
 
-*Assumed ranges of response variables used to generate parameter values*
+*Approximate ranges of response variables used to generate parameter values*
 
 |Event|Resp. variable|Range|
 |-----|--------------|-----|
@@ -88,13 +88,13 @@ Table 1
 |Smooth pursuit|Acceleration|0-30|
 |Smooth pursuit|Angle|~0|
 
-*Note*. Units are °/s (velocity), °/s^2^ (acceleration), and radians (angle). ~ indicates that the distribution has a peak at this value.   
+*Note*. Units are °/s (velocity), °/s^2^ (acceleration), and radians (angle). ~ indicates that the distribution has a peak at this value. Velocity ranges are based on event velocities reported in @Larsson2013. Since we would also like to test the algorithm on extreme data distributions, we extended the ranges beyond those found in typical eye movement data.
 
 ***
 
 Table 2  
 
-*HMM parameter values for generating the data*
+*HMM parameter values for generating data*
 
 |State|Parameter|Interval|Default|Description|
 |-----|---------|--------|-----|-----------|
