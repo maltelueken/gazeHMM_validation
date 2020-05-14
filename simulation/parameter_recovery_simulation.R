@@ -9,6 +9,7 @@
 library(depmixS4)
 library(parallel)
 library(tidyverse)
+library(psych)
 source("simulation/model_simulation.R")
 source("algorithm/model_helper_functions.R")
 
@@ -75,7 +76,7 @@ for (ns in 2:4) {
     
     ncores <- detectCores()
     clust <- makeCluster(ncores)
-    clusterExport(clust, list("HMM_simulate", "str_detect", "N", "par.fix.true", "par.states", "par.names", "par.resps", "p", "ns"))
+    clusterExport(clust, list("HMM_simulate", "cohen.kappa", "N", "par.fix.true", "par.states", "par.names", "par.resps", "p", "ns"))
     
     
     # Iterate over intervals
@@ -150,10 +151,7 @@ for (ns in 2:4) {
       
       # Calculate accuracy
       
-      acc <- try(mean(model.sim@states == model.fit@posterior$state))
-      
-      
-      # Backtransform parameters
+      acc <- try(cohen.kappa(data.frame(x = model.sim@states, y = model.fit@posterior$state))$kappa)
       
       output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
       
@@ -194,7 +192,7 @@ for (ns in 2:4) {
     
     ncores <- detectCores()
     clust <- makeCluster(ncores)
-    clusterExport(clust, list("HMM_simulate", "D", "par.fix.true", "noise.sigma.int", "noise.kappa.int", "ss", "ns"))
+    clusterExport(clust, list("HMM_simulate", "cohen.kappa", "D", "par.fix.true", "noise.sigma.int", "noise.kappa.int", "ss", "ns"))
     
     
     # Iterate over intervals
@@ -276,7 +274,7 @@ for (ns in 2:4) {
       
       # Calculate accuracy
       
-      acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      acc <- try(cohen.kappa(data.frame(x = model.sim@states, y = model.fit@posterior$state))$kappa)
       
       output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
       
@@ -316,7 +314,7 @@ for (ns in 2:4) {
     
     ncores <- detectCores()
     clust <- makeCluster(ncores)
-    clusterExport(clust, list("HMM_simulate", "N", "D", "par.fix.true", "ns", "b"))
+    clusterExport(clust, list("HMM_simulate", "cohen.kappa", "N", "D", "par.fix.true", "ns", "b"))
     
     
     # Iterate over intervals
@@ -376,7 +374,7 @@ for (ns in 2:4) {
       
       # Calculate accuracy
       
-      acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      acc <- try(cohen.kappa(data.frame(x = model.sim@states, y = model.fit@posterior$state))$kappa)
       
       output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
       
@@ -421,7 +419,7 @@ for (ns in 2:4) {
     
     ncores <- detectCores()
     clust <- makeCluster(ncores)
-    clusterExport(clust, list("HMM_simulate", "N", "par.fix.true", "miss.int", "ns", "ms"))
+    clusterExport(clust, list("HMM_simulate", "cohen.kappa", "N", "par.fix.true", "miss.int", "ns", "ms"))
     
     
     # Iterate over intervals
@@ -510,7 +508,7 @@ for (ns in 2:4) {
       
       # Calculate accuracy
       
-      acc <- try(mean(model.sim@states == model.fit@posterior$state))
+      acc <- try(cohen.kappa(data.frame(x = model.sim@states, y = model.fit@posterior$state))$kappa)
       
       output <- list(pars.true = getpars(model), pars.start = getpars(model.start), pars.est = try(getpars(model.fit)), accuracy = acc)
       
