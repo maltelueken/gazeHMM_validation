@@ -138,6 +138,9 @@ for (part in 1:4) {
 
 rmsd.data <- lapply(rmsd, function(x) lapply(x, as.data.frame))
 rmsd.data <- lapply(rmsd.data, function(x) lapply(x, function(y) {as.data.frame(t(as.matrix(y)))}))
+rmsd.data <- lapply(rmsd.data, function(x) lapply(1:length(x), function(y, data) {
+  names(data[[y]]) <- names(rmsd[[1]][[y]][[1]])
+  return(data[[y]])}, data = x))
 
 
 # Calculate regression weights for transition probabilities
@@ -191,13 +194,6 @@ regw.tr <- lapply(get("estimates.1"), function(x) {
     
     return(out)
   })
-
-  reg <- lapply(df, function(z) {
-
-    lmfit <- lm(est ~ true, data = z)
-
-    return(lmfit)
-  })
 })
 
 
@@ -240,20 +236,173 @@ regw.resp <- lapply(get("estimates.1"), function(x) {
 
     return(out)
   })
-
-  reg <- lapply(df, function(z) {
-
-    lmfit <- lm(est ~ true, data = z)
-
-    return(lmfit)
-  })
 })
 
 
-# Plot MSE
+# Plot RMdSPD part 1
 
-lapply(mse.data, function(x) { lapply(x, function(y) {
+plots.rmsd.1 <- lapply(rmsd.data[[1]], function(x) {
   
-  ggplot(data = y)
+  names.pars.varied <- list(bquote(a["i=j"]), bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                            bquote(beta["acc"]), bquote(kappa))
   
-})})
+  if(ncol(x) == 18) {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]))
+    
+  } else if(ncol(x) == 30) {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]))
+    
+  } else {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]), bquote(a["i4"]))
+    
+  }
+  
+  names.pars.est <- append(trnames, list(bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                         bquote(beta["acc"]), bquote(mu), bquote(kappa)))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(par.varied = c(0, 1, 2, 3, 4, rep(c(1, 2, 3, 4, 5), (nrow(x) %/% 5)-1)),
+           state.varied = c(1, rep(1, 4), rep(2:((nrow(x) %/% 5)), each = 5))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "RMdSPD", names_repair = "unique") %>%
+    mutate(RMdSPD = cut(RMdSPD, breaks = c(0, 0.1, 0.5, Inf), c("good", "moderate", "bad")),
+           state.est = rep(c(rep(1:max(state.varied), max(state.varied)+1),
+                         rep(1:max(state.varied), each = 6)), nrow(x)),
+           par.est = rep(c(rep(1, max(state.varied)), 
+                           rep(2:(max(state.varied)+1), each = max(state.varied)), 
+                           rep((max(state.varied)+2):(max(state.varied)+7), max(state.varied))), nrow(x))) %>%
+    mutate_at(vars(par.varied, state.varied, par.est, state.est), as.factor)
+
+  p <- ggplot(data = data.long, aes(x = par.varied, y = par.est, fill = RMdSPD)) +
+    geom_tile() + facet_grid(cols = vars(state.varied), rows = vars(state.est)) +
+    scale_x_discrete(labels = names.pars.varied) +
+    scale_y_discrete(labels = names.pars.est)
+    theme(axis.text = element_text(size = 14))
+  
+  return(p)
+})
+
+print(plots.rmsd.1[[3]])
+
+
+# Plot RMdSPD parts 2, 3, and 4
+
+plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
+  
+  if(ncol(x) == 18) {
+    
+    k <- 2
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]))
+    
+  } else if(ncol(x) == 30) {
+    
+    k <- 3
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]))
+    
+  } else {
+    
+    k <-4
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]), bquote(a["i4"]))
+    
+  }
+  
+  names.pars.est <- append(trnames, list(bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                                         bquote(beta["acc"]), bquote(mu), bquote(kappa)))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = 1:3) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "RMdSPD", names_repair = "unique") %>%
+    mutate(state.est = rep(c(rep(1:k, k+1),
+                             rep(1:k, each = 6)), nrow(x)),
+           par.est = rep(c(rep(1, k), 
+                           rep(2:(k+1), each = k), 
+                           rep((k+2):(k+7), k)), nrow(x))) %>%
+    mutate_at(vars(cond, par.est, state.est), as.factor)
+  
+  p <- ggplot(data = data.long, aes(x = par.est, y = RMdSPD, color = cond)) +
+    geom_point(position = position_dodge(0.25)) + facet_grid(cols = vars(state.est)) +
+    scale_x_discrete(labels = names.pars.est) +
+    scale_y_continuous(breaks = c(0.1, 0.5, 1, 5, 10)) +
+    geom_hline(yintercept = 0.1, linetype = "dashed") +
+    geom_hline(yintercept = 0.5, linetype = "dashed")
+  
+  if(y == 2) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+  } else if (y == 3) {
+    names.cond <- c("1", "2", "3")
+    label.cond <- bquote(beta["start"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "m"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}), data = rmsd.data)
+
+print(plots.rmsd.234[[3]][[1]])
+
+
+# Plot linear regressions for transition probabilities
+
+D <- 5
+
+regw.tr.data <- lapply(regw.tr, function(x) lapply(x, function(y) rbind(y)))
+regw.tr.data <- lapply(regw.tr.data, function(x) reduce(x, rbind))
+
+plots.lm.tr <- lapply(1:length(regw.tr.data), function(x, y) {
+  
+  data <- y[[x]] %>% 
+    mutate(par = rep(1:(x+1)^2, each = D),
+           from = rep(rep(1:(x+1), each = D), x+1),
+           to = rep(1:(x+1), each = D*(x+1)))
+  
+  p <- ggplot(data, aes(x = true, y = est)) + 
+    facet_grid(rows = vars(from), cols = vars(to), labeller = label_both) +
+    geom_point() + geom_smooth(method = "lm") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+  
+  return(p)
+}, y = regw.tr.data)
+
+print(plots.lm.tr[[2]])
+
+
+# Plot linear regressions for response parameters
+
+regw.resp.data <- lapply(regw.resp, function(x) lapply(x, function(y) rbind(y)))
+regw.resp.data <- lapply(regw.resp.data, function(x) reduce(x, rbind))
+
+parnames <- list(bquote(alpha["vel;1"]), bquote(beta["vel;1"]), bquote(alpha["acc;1"]), bquote(beta["acc;1"]),
+                 bquote(alpha["vel;2"]), bquote(beta["vel;2"]), bquote(alpha["acc;2"]), bquote(beta["acc;2"]), bquote(kappa["2"]),
+                 bquote(alpha["vel;3"]), bquote(beta["vel;3"]), bquote(alpha["acc;3"]), bquote(beta["acc;3"]), bquote(kappa["3"]),
+                 bquote(alpha["vel;4"]), bquote(beta["vel;4"]), bquote(alpha["acc;4"]), bquote(beta["acc;4"]), bquote(kappa["4"]))
+
+plots.lm.resp <- lapply(regw.resp.data, function(x) {
+  
+  npar <- nrow(x) %/% D
+  
+  data <- x %>% 
+    mutate(par = rep(1:npar, each = D),
+           type = rep(1, 2, 1, 2))
+  
+  p <- ggplot(data, aes(x = true, y = est)) + 
+    facet_wrap(vars(par), scales = "free", labeller = label_bquote(.(parnames[[par]]))) +
+    geom_point() + geom_smooth(method = "lm") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+  
+  return(p)
+})
+
+print(plots.lm.resp[[3]])
