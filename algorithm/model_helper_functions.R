@@ -277,7 +277,7 @@ setMethod("fit","vMF",
               
               miss <- is.na(y)
               
-              dens <- ifelse(miss, 1, dvm(y, mu = par[1], exp(kappa = par[2])))
+              dens <- ifelse(miss, 1, dvm(y, mu = par[1], kappa = exp(par[2])))
               
               return(-sum(w*log(dens)))
             }
