@@ -3,7 +3,6 @@
 # Author: Malte Lüken
 # Date:17.05.2020
 
-library(R.matlab)
 library(tidyverse)
 library(depmixS4)
 library(parallel)
@@ -11,6 +10,38 @@ library(parallel)
 source("algorithm/gazeHMM.R")
 source("algorithm/model_helper_functions.R")
 source("algorithm/plotting_functions.R")
+source("algorithm/preprocessing.R")
+
+
+# Function to fit 1-state HMM
+
+onestate_HMM <- function(data, respstart, sf = c(10, 10)) {
+  
+  source("algorithm/model_helper_functions.R")
+  
+  if(missing(respstart)) {
+    
+    respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1)))
+    
+  }
+  
+  if(all(sf > 0)) {
+    
+    data$vel <- data$vel/sf[1]
+    data$acc <- data$acc/sf[2]
+    
+  }
+  
+  velresp <- fit(altGamma(data$vel, pstart = respstart[["fix"]][["vel"]]))
+  accresp <- fit(altGamma(data$acc, pstart = respstart[["fix"]][["acc"]]))
+  angresp <- fit(unif(data$angle))
+  
+  ll <- sum(dens(velresp, log = T) + dens(accresp, log = T) + dens(angresp, log = T))
+  
+  n <- nrow(data)
+  
+  return(list(ll, n, response = list(velresp, accresp, angresp)))
+}
 
 
 # Load data
@@ -49,7 +80,7 @@ fr <- 500
 
 ncores <- detectCores()
 clust <- makeCluster(ncores)
-clusterExport(clust, list("classify_gaze_data", "res", "dim", "dist", "fr", "A2017"))
+clusterExport(clust, list("classify_gaze_data", "onestate_HMM", "preprocess", "res", "dim", "dist", "fr", "A2017"))
 
 A2017.fit <- lapply(A2017, function(stim) parLapply(clust, stim, function(df) {
   
@@ -67,14 +98,18 @@ A2017.fit <- lapply(A2017, function(stim) parLapply(clust, stim, function(df) {
   
   fit <- list()
   
+  fit[["1"]] <- try(onestate_HMM(preprocess(x = df$x, y = df$y, t = df$t, unit = "px",
+                                            res = res, dim = dim, dist = dist, fr = fr, blink = c(0, 0),
+                                            sg.order = 3, sg.length = 5)))
+  
   for (k in 2:5) {
     
-    fit[as.character(k)] <- classify_gaze_data(x = df$x, y = df$y, t = df$t, unit = "px",
-                                res = res, dim = dim, dist = dist, fr = fr, blink = c(0, 0),
-                                nstates = k)
+    fit[[as.character(k)]] <- try(classify_gaze_data(x = df$x, y = df$y, t = df$t, unit = "px",
+                                                     res = res, dim = dim, dist = dist, fr = fr, blink = c(0, 0),
+                                                     nstates = k))
     
   }
-
+  
   return(fit)
 }))
 
