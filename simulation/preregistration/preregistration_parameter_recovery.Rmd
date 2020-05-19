@@ -59,7 +59,7 @@ In the last part, we will set intervals of the generated data to be missing. The
 ## Recovery Analysis
 
 For each parameter, we will calculate the root median square proportion deviation [RMdSPD; analogous to root median square percentage errors, see @Hyndman2006] between the true and estimated parameter values: $$RMdSPD = \sqrt{Med((\frac{\psi_{true}-\psi_{est}}{\psi_{true}})^2)}.$$
-We will treat $RMdSPD < 0.1$ as good, $0.1 \le RMdSPD < 0.5$ as moderate, and $RMdSPD \ge 5$ as bad recovery of a parameter. By taking the median, we will reduce the influence of potential outliers in the estimation and using proportions will enable us to compare RMdSPD values across parameters and data sets.  
+We will treat $RMdSPD < 0.1$ as good, $0.1 \le RMdSPD < 0.5$ as moderate, and $RMdSPD \ge 0.5$ as bad recovery of a parameter. By taking the median, we will reduce the influence of potential outliers in the estimation and using proportions will enable us to compare RMdSPD values across parameters and data sets.  
 
 Additionally, we will apply a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval in Part 1. Regression slopes closer to one will indicate that the model better captures parameter change. Regression intercepts different from zero will reflect a bias in parameter estimation.   
 
@@ -67,7 +67,7 @@ To assess state recovery, we will compute Cohen's kappa (for all events taken to
 
 Models that can not be fitted will be excluded from the recovery.
 
-***
+\newpage
 
 Table 1
 

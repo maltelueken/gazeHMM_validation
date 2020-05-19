@@ -570,7 +570,7 @@ save("estimates.4", file = "simulation/part4.Rdata")
 
 # Record ending time
 
-time.end <- Sys.time
+time.end <- Sys.time()
 
 
 # Record session info 
