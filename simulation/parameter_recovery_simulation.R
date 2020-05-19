@@ -14,6 +14,11 @@ source("simulation/model_simulation.R")
 source("algorithm/model_helper_functions.R")
 
 
+# Record starting time
+
+time.begin <- Sys.time()
+
+
 # Number of data sets to be generated
 
 D <- 5
@@ -76,22 +81,28 @@ for (ns in 2:4) {
     
     ncores <- detectCores()
     clust <- makeCluster(ncores)
-    clusterExport(clust, list("HMM_simulate", "cohen.kappa", "N", "par.fix.true", "par.states", "par.names", "par.resps", "p", "ns"))
+    clusterExport(clust, list("HMM_simulate", "cohen.kappa", "D", "N", "par.int.true", "par.fix.true", "par.states", "par.names", "par.resps", "p", "ns"))
     
     
     # Iterate over intervals
     
-    estimates.1[[as.character(ns)]][[p]] <- parLapply(clust, par.int.true[,p], function(x, samples = N, k = ns, 
-                                                                                        par.state = par.states[p], 
-                                                                                        par.name = par.names[p], 
-                                                                                        par.resp = par.resps[p], 
-                                                                                        trueResp = par.fix.true) {
+    estimates.1[[as.character(ns)]][[p]] <- parLapply(clust, 1:D, function(x, samples = N, k = ns,
+                                                                        par.int = par.int.true[,p],
+                                                                        par.state = par.states[p], 
+                                                                        par.name = par.names[p], 
+                                                                        par.resp = par.resps[p], 
+                                                                        trueResp = par.fix.true) {
+      
+      # Generate data seed
+      
+      seed.data <- k*1e6 + p*1e4 + x*1e2
+      
       
       # Set true parameter values
       
       if(par.name > 0 && par.resp > 0) {
         
-        trueResp[[par.state]][[par.resp]][par.name] <- x
+        trueResp[[par.state]][[par.resp]][par.name] <- par.int[x]
         
         trueTr <- matrix(c(0.9, 0.1, 
                            0.1, 0.9), nrow = k, ncol = k)
@@ -99,9 +110,9 @@ for (ns in 2:4) {
         
         trueTr <- matrix(NA, nrow = k, ncol = k)
         
-        diag(trueTr) <- x
+        diag(trueTr) <- par.int[x]
         
-        trueTr[is.na(trueTr)] <- (1-x)/(k-1)
+        trueTr[is.na(trueTr)] <- (1-par.int[x])/(k-1)
       }
       
       trueIn <- rep(1/k, k)
@@ -111,27 +122,29 @@ for (ns in 2:4) {
       
       model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
       
-      model.sim <- simulate(model)
+      model.sim <- simulate(model, seed = seed.data)
       
       class(model.sim) <- "depmix"
       
       
       # Generate and set starting values
       
-      respStart <- lapply(trueResp, function(x) {
+      respStart <- lapply(1:length(trueResp), function(x, event = trueResp) {
         
-        lapply(x, function(y) {
+        lapply(1:length(event[[x]]), function(y, resp = event[[x]]) {
           
-          vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
+          set.seed(seed.data + x*10 + y)
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = resp[[y]][1]/2), rgamma(1, shape = 3, scale = resp[[y]][2]/2)))
           
           return(vec) 
         })
       })
       
-      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
-      respStart[["sac"]][["angle"]][1] <- 0
-      respStart[["pso"]][["angle"]][1] <- pi
-      respStart[["sp"]][["angle"]][1] <- 0
+      respStart[[1]][[3]] <- c(0, 2*pi)
+      respStart[[2]][[3]][1] <- 0
+      respStart[[3]][[3]][1] <- pi
+      respStart[[4]][[3]][1] <- 0
       
       inStart <- trueIn
       trStart <- matrix(1/k, nrow = k, ncol = k)
@@ -202,6 +215,11 @@ for (ns in 2:4) {
                                                                                           noise.kappa = noise.kappa.int,
                                                                                           trueResp = par.fix.true) {
       
+      # Generate data seed
+      
+      seed.data <- k*1e6 + ss*1e4 + x*1e2 + 1e7
+      
+      
       # Set true parameter values
       
       trueTr <- matrix(c(0.9, 0.1, 
@@ -214,17 +232,19 @@ for (ns in 2:4) {
       
       model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
       
-      model.sim <- simulate(model)
+      model.sim <- simulate(model, seed = seed.data)
       
       class(model.sim) <- "depmix"
       
       
       # Add noise to data
-
+      
+      set.seed(seed.data)
       noise.angle <- rnorm(ntimes(model.sim), 0, noise.kappa[x])
       
-      gamma_noise <- function(x, noise) {
+      gamma_noise <- function(x, i, noise) {
         
+        set.seed(seed.data)
         return(rgamma(1, shape = 3, scale = x/2*noise))
       }
       
@@ -241,20 +261,22 @@ for (ns in 2:4) {
       
       # Generate and set starting values
       
-      respStart <- lapply(trueResp, function(x) {
+      respStart <- lapply(1:length(trueResp), function(x, event = trueResp) {
         
-        lapply(x, function(y) {
+        lapply(1:length(event[[x]]), function(y, resp = event[[x]]) {
           
-          vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
+          set.seed(seed.data + x*10 + y)
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = resp[[y]][1]/2), rgamma(1, shape = 3, scale = resp[[y]][2]/2)))
           
           return(vec) 
         })
       })
       
-      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
-      respStart[["sac"]][["angle"]][1] <- 0
-      respStart[["pso"]][["angle"]][1] <- pi
-      respStart[["sp"]][["angle"]][1] <- 0
+      respStart[[1]][[3]] <- c(0, 2*pi)
+      respStart[[2]][[3]][1] <- 0
+      respStart[[3]][[3]][1] <- pi
+      respStart[[4]][[3]][1] <- 0
       
       inStart <- trueIn
       trStart <- matrix(1/k, nrow = k, ncol = k)
@@ -322,6 +344,11 @@ for (ns in 2:4) {
     estimates.3[[as.character(ns)]][[as.character(b)]] <- parLapply(clust, 1:D, function(x, samples = N, k = ns, B = b,
                                                                                                trueResp = par.fix.true) {
       
+      # Generate data seed
+      
+      seed.data <- k*1e6 + b*1e4 + x*1e2 + 2e7
+      
+      
       # Set true parameter values
       
       trueTr <- matrix(c(0.9, 0.1, 
@@ -334,27 +361,29 @@ for (ns in 2:4) {
       
       model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
       
-      model.sim <- simulate(model)
+      model.sim <- simulate(model, seed = seed.data)
       
       class(model.sim) <- "depmix"
       
       
       # Generate and set starting values
       
-      respStart <- lapply(trueResp, function(x) {
+      respStart <- lapply(1:length(trueResp), function(x, event = trueResp) {
         
-        lapply(x, function(y) {
+        lapply(1:length(event[[x]]), function(y, resp = event[[x]]) {
           
-          vec <- log(c(rgamma(1, shape = 3, scale = (y[1]/2)*B), rgamma(1, shape = 3, scale = (y[2]/2)*B)))
+          set.seed(seed.data + x*10 + y)
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = resp[[y]][1]/2), rgamma(1, shape = 3, scale = resp[[y]][2]/2)))
           
           return(vec) 
         })
       })
       
-      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
-      respStart[["sac"]][["angle"]][1] <- 0
-      respStart[["pso"]][["angle"]][1] <- pi
-      respStart[["sp"]][["angle"]][1] <- 0
+      respStart[[1]][[3]] <- c(0, 2*pi)
+      respStart[[2]][[3]][1] <- 0
+      respStart[[3]][[3]][1] <- pi
+      respStart[[4]][[3]][1] <- 0
       
       inStart <- trueIn
       trStart <- matrix(1/k, nrow = k, ncol = k)
@@ -424,9 +453,15 @@ for (ns in 2:4) {
     
     # Iterate over intervals
     
-    estimates.4[[as.character(ns)]][[as.character(ms)]] <- parLapply(clust, miss.int, function(x, samples = N, k = ns, 
+    estimates.4[[as.character(ns)]][[as.character(ms)]] <- parLapply(clust, 1:D, function(x, samples = N, k = ns,
+                                                                                          l = miss.int,
                                                                                           nint = ms,
                                                                                           trueResp = par.fix.true) {
+      
+      # Generate data seed
+      
+      seed.data <- k*1e6 + nint*1e4 + x*1e2 + 3e7
+      
       
       # Set true parameter values
       
@@ -440,7 +475,7 @@ for (ns in 2:4) {
       
       model <- HMM_simulate(n = samples, nstates = k, trueresp = trueResp, truetr = trueTr, truein = trueIn)
       
-      model.sim <- simulate(model)
+      model.sim <- simulate(model, seed = seed.data)
       
       class(model.sim) <- "depmix"
       
@@ -450,17 +485,23 @@ for (ns in 2:4) {
       na <- numeric(ntimes(model.sim))
       pos <- 1:ntimes(model.sim)
       
-      while(mean(na == 0) > 1-((nint*x)/ntimes(model.sim))) {
+      seed.int <- seed.data
+      
+      while(mean(na == 0) > 1-((nint*l[x])/ntimes(model.sim))) {
         
         na <- numeric(ntimes(model.sim))
         
         for (i in 1:nint) {
           
-          st <- sample(pos[na == 0 & pos <= max(pos)-x], 1)
+          set.seed(seed.int + i)
           
-          na[st:(st+x)] <- i
+          st <- sample(pos[na == 0 & pos <= max(pos)-l[x]], 1)
+          
+          na[st:(st+l[x])] <- i
           
         }
+        
+        seed.int <- seed.int + 1
       }
         
         
@@ -475,20 +516,22 @@ for (ns in 2:4) {
       
       # Generate and set starting values
       
-      respStart <- lapply(trueResp, function(x) {
+      respStart <- lapply(1:length(trueResp), function(x, event = trueResp) {
         
-        lapply(x, function(y) {
+        lapply(1:length(event[[x]]), function(y, resp = event[[x]]) {
           
-          vec <- log(c(rgamma(1, shape = 3, scale = y[1]/2), rgamma(1, shape = 3, scale = y[2]/2)))
+          set.seed(seed.data + x*10 + y)
+          
+          vec <- log(c(rgamma(1, shape = 3, scale = resp[[y]][1]/2), rgamma(1, shape = 3, scale = resp[[y]][2]/2)))
           
           return(vec) 
         })
       })
       
-      respStart[["fix"]][["angle"]] <- c(0, 2*pi)
-      respStart[["sac"]][["angle"]][1] <- 0
-      respStart[["pso"]][["angle"]][1] <- pi
-      respStart[["sp"]][["angle"]][1] <- 0
+      respStart[[1]][[3]] <- c(0, 2*pi)
+      respStart[[2]][[3]][1] <- 0
+      respStart[[3]][[3]][1] <- pi
+      respStart[[4]][[3]][1] <- 0
       
       inStart <- trueIn
       trStart <- matrix(1/k, nrow = k, ncol = k)
@@ -523,3 +566,18 @@ for (ns in 2:4) {
 beepr::beep(sound = 1)
 
 save("estimates.4", file = "simulation/part4.Rdata")
+
+
+# Record ending time
+
+time.end <- Sys.time
+
+
+# Record session info 
+
+meta <- sessionInfo()
+
+
+# Save workspace image
+
+save.image(file = "simulation/results_image.Rdata")
