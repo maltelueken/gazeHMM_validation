@@ -21,7 +21,7 @@ time.begin <- Sys.time()
 
 # Number of data sets to be generated
 
-D <- 5
+D <- 100
 
 
 # Default response parameter values
