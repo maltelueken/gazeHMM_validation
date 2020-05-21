@@ -57,6 +57,7 @@ linkfun <- function(p, base) {
   return(beta)
 }
 
+
 # Function to transform parameters to normal scale
 
 backtrans <- function(x) {
@@ -239,6 +240,33 @@ regw.resp <- lapply(get("estimates.1"), function(x) {
 })
 
 
+# Summarise accuracy
+
+acc.data <- list()
+
+for (part in 1:4) {
+  
+  acc.data[[part]] <- lapply(get(paste("estimates.", part, sep = "")), function(x) {
+    out <- lapply(x, function(y) { 
+      out <- lapply(y, function(z) {
+        
+        if(is.numeric(z$accuracy)) {
+          acc <- z$accuracy
+        } else {
+          acc <- NA
+        }
+        
+        return(acc)
+      })
+      
+      return(as.vector(reduce(out, cbind)))
+    })
+    
+    return(as.data.frame(t(reduce(out, cbind))))
+  })
+}
+
+
 # Plot RMdSPD part 1
 
 plots.rmsd.1 <- lapply(rmsd.data[[1]], function(x) {
@@ -351,12 +379,12 @@ plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
   return(p)
 }), data = rmsd.data)
 
-print(plots.rmsd.234[[3]][[1]])
+print(plots.rmsd.234[[3]][[3]])
 
 
 # Plot linear regressions for transition probabilities
 
-D <- 5
+D <- 100
 
 regw.tr.data <- lapply(regw.tr, function(x) lapply(x, function(y) rbind(y)))
 regw.tr.data <- lapply(regw.tr.data, function(x) reduce(x, rbind))
@@ -376,7 +404,7 @@ plots.lm.tr <- lapply(1:length(regw.tr.data), function(x, y) {
   return(p)
 }, y = regw.tr.data)
 
-print(plots.lm.tr[[2]])
+print(plots.lm.tr[[3]])
 
 
 # Plot linear regressions for response parameters
@@ -406,3 +434,64 @@ plots.lm.resp <- lapply(regw.resp.data, function(x) {
 })
 
 print(plots.lm.resp[[3]])
+
+
+# Plot accuracy part 1
+
+plots.acc.1 <- lapply(acc.data[[1]], function(x) {
+  
+  names.pars.varied <- list(bquote(a["i=j"]), bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                            bquote(beta["acc"]), bquote(kappa))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(par.varied = c(0, 1, 2, 3, 4, rep(c(1, 2, 3, 4, 5), (nrow(x) %/% 5)-1)),
+           state.varied = c(1, rep(1, 4), rep(2:((nrow(x) %/% 5)), each = 5))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    mutate_at(vars(par.varied, state.varied), as.factor)
+  
+  p <- ggplot(data = data.long, aes(x = par.varied, y = accuracy)) +
+    geom_boxplot() + facet_grid(cols = vars(state.varied)) +
+    scale_x_discrete(labels = names.pars.varied)
+  
+  return(p)
+})
+
+print(plots.acc.1[[2]])
+
+
+# Plot accuracy parts 2, 3, and 4
+
+acc.data.234 <- lapply(acc.data[2:4], function(x) reduce(x, rbind))
+
+plots.acc.234 <- lapply(1:3, function(y, data) {
+  
+  x <- as_tibble(data[[y]], .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy")
+  
+  p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
+    geom_boxplot() + 
+    scale_x_discrete(name = "k (number of states)")
+  
+  if(y == 1) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+  } else if (y == 2) {
+    names.cond <- c("1", "2", "3")
+    label.cond <- bquote(beta["start"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "m"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}, data = acc.data.234)
+
+print(plots.acc.234[[3]])
