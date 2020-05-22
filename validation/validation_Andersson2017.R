@@ -6,6 +6,7 @@
 library(tidyverse)
 library(depmixS4)
 library(parallel)
+library(R.matlab)
 
 source("algorithm/gazeHMM.R")
 source("algorithm/model_helper_functions.R")
@@ -80,7 +81,7 @@ fr <- 500
 
 ncores <- detectCores()
 clust <- makeCluster(ncores)
-clusterExport(clust, list("classify_gaze_data", "onestate_HMM", "preprocess", "res", "dim", "dist", "fr", "A2017"))
+clusterExport(clust, list("gazeHMM", "onestate_HMM", "preprocess", "res", "dim", "dist", "fr", "A2017"))
 
 A2017.fit <- lapply(A2017, function(stim) parLapply(clust, stim, function(df) {
   
@@ -104,7 +105,7 @@ A2017.fit <- lapply(A2017, function(stim) parLapply(clust, stim, function(df) {
   
   for (k in 2:5) {
     
-    fit[[as.character(k)]] <- try(classify_gaze_data(x = df$x, y = df$y, t = df$t, unit = "px",
+    fit[[as.character(k)]] <- try(gazeHMM(x = df$x, y = df$y, t = df$t, unit = "px",
                                                      res = res, dim = dim, dist = dist, fr = fr, blink = c(0, 0),
                                                      nstates = k))
     
