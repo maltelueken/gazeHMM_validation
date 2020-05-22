@@ -15,11 +15,7 @@ HMM_classify <- function(data, nstates, respstart, trstart, instart,
   # Check if starting values for response model supplied, set to default if not
   
   if(missing(respstart)) {
-    if(nstates == 1) {
-      
-      respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1)))
-      
-    } else if(nstates == 2) {
+    if(nstates == 2) {
       
       respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1)), 
                         sac = list(vel = c(5, 5), acc = c(5, 5), angle = c(0, 10)))
@@ -71,15 +67,15 @@ HMM_classify <- function(data, nstates, respstart, trstart, instart,
   
   # Create response model
   
-  resp <- list(list(altGamma(data$vel, pstart = respstart[["fix"]][["vel"]]),
-                              altGamma(data$acc, pstart = respstart[["fix"]][["acc"]]),
-                              unif(data$angle)))
+  resp <- list(list(altGamma(data$vel, pstart = sapply(respstart[[1]][[1]], gamma_start)),
+                    altGamma(data$acc, pstart = sapply(respstart[[1]][[2]], gamma_start)),
+                    unif(data$angle)))
   
   for (s in 2:nstates) {
     
-    resp[[s]] <- list(altGamma(data$vel, pstart = respstart[[s]][["vel"]]),
-                                                  altGamma(data$acc, pstart = respstart[[s]][["acc"]]),
-                                                  vMF(data$angle, pstart = respstart[[s]][["angle"]]))
+    resp[[s]] <- list(altGamma(data$vel, pstart = sapply(respstart[[s]][[1]], gamma_start)),
+                      altGamma(data$acc, pstart = sapply(respstart[[s]][[2]], gamma_start)),
+                      vMF(data$angle, pstart = c(respstart[[s]][[3]][1], gamma_start(respstart[[s]][[3]][2]))))
     
   }
   
