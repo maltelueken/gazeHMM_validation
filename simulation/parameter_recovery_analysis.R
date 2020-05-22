@@ -74,9 +74,6 @@ backtrans <- function(x) {
   
   return(out)
 }
-mlogit
-
-#backtrans(estimates.1$`3`[[1]][[3]]$pars.est)
 
 
 # Calculate normalized root mean square deviation
@@ -368,7 +365,7 @@ plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
     label.cond <- "N"
   } else if (y == 3) {
     names.cond <- c("1", "2", "3")
-    label.cond <- bquote(beta["start"])
+    label.cond <- bquote(tau["start"])
   } else {
     names.cond <- c("1", "3", "5")
     label.cond <- "m"
@@ -379,7 +376,7 @@ plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
   return(p)
 }), data = rmsd.data)
 
-print(plots.rmsd.234[[3]][[3]])
+print(plots.rmsd.234[[1]][[1]])
 
 
 # Plot linear regressions for transition probabilities
@@ -483,7 +480,7 @@ plots.acc.234 <- lapply(1:3, function(y, data) {
     label.cond <- "N"
   } else if (y == 2) {
     names.cond <- c("1", "2", "3")
-    label.cond <- bquote(beta["start"])
+    label.cond <- bquote(tau["start"])
   } else {
     names.cond <- c("1", "3", "5")
     label.cond <- "m"
@@ -494,4 +491,114 @@ plots.acc.234 <- lapply(1:3, function(y, data) {
   return(p)
 }, data = acc.data.234)
 
-print(plots.acc.234[[3]])
+print(plots.acc.234[[2]])
+
+
+# Plot accuracy over interval parts 2 and 4
+
+plots.acc.int.24 <- lapply(c(1, 3), function(y, data) {
+  
+  x <- as_tibble(data[[y]], .name_repair = "unique")
+  
+  if(y == 1) {
+  
+    int <- rep(seq(1, 5, length.out = D), 9) 
+  
+  } else {
+    
+    int <- rep(floor(seq(1, 200, length.out = D)), 9)
+    
+  }
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    mutate(int = int)
+  
+  p <- ggplot(data = data.long, aes(x = int, y = accuracy, color = cond)) +
+    facet_grid(cols = vars(k)) + 
+    geom_point() # + geom_smooth(method = "lm")
+  
+  if(y == 1) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+    x.name <- bquote(tau["noise"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "m"
+    x.name <- "l"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond) +
+    scale_x_continuous(name = x.name)
+  
+  return(p)
+}, data = acc.data.234)
+
+print(plots.acc.int.24[[2]])
+
+
+# Plot proportion of erroneous models part 1
+
+plots.err.1 <- lapply(acc.data[[1]], function(x) {
+  
+  names.pars.varied <- list(bquote(a["i=j"]), bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                            bquote(beta["acc"]), bquote(kappa))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(par.varied = c(0, 1, 2, 3, 4, rep(c(1, 2, 3, 4, 5), (nrow(x) %/% 5)-1)),
+           state.varied = c(1, rep(1, 4), rep(2:((nrow(x) %/% 5)), each = 5))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    mutate_at(vars(par.varied, state.varied), as.factor) %>%
+    group_by(par.varied, state.varied) %>%
+    summarise(error = mean(is.na(accuracy)))
+  
+  p <- ggplot(data = data.long, aes(x = par.varied, y = error)) +
+    geom_point() + facet_grid(cols = vars(state.varied)) +
+    scale_x_discrete(labels = names.pars.varied) + 
+    scale_y_continuous(name = "proportion erroneous models", limits = c(0, 1))
+  
+  return(p)
+})
+
+print(plots.err.1[[1]])
+
+
+# Plot proportion of erroneous models parts 2, 3, 4
+
+plots.err.234 <- lapply(1:3, function(y, data) {
+  
+  x <- as_tibble(data[[y]], .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    group_by(cond, k) %>%
+    summarise(error = mean(is.na(accuracy)))
+  
+  p <- ggplot(data = data.long, aes(x = k, y = error, color = cond)) +
+    geom_point(position = position_dodge(width = 0.25)) + 
+    scale_x_discrete(name = "k (number of states)") +
+    scale_y_continuous(name = "proportion erroneous models", limits = c(0, 1))
+  
+  if(y == 1) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+  } else if (y == 2) {
+    names.cond <- c("1", "2", "3")
+    label.cond <- bquote(tau["start"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "m"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}, data = acc.data.234)
+
+print(plots.err.234[[1]])
