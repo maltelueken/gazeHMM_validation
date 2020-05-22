@@ -468,3 +468,15 @@ setMethod("simulate", signature(object = "altGamma"),
             return(as.matrix(sim))
           }
 )
+
+
+# Define method that generates starting values from gamma distribu --------
+
+gamma_start <- function(x, alpha = 3, seed) {
+  
+  if(!missing(seed)) set.seed(seed)
+  
+  start <- rgamma(1, shape = alpha, scale = x/(alpha - 1))
+  
+  return(start)
+}
