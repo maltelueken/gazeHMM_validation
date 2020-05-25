@@ -470,7 +470,7 @@ setMethod("simulate", signature(object = "altGamma"),
 )
 
 
-# Define method that generates starting values from gamma distribu --------
+# Define method that generates starting values from gamma distribution --------
 
 gamma_start <- function(x, alpha = 3, seed) {
   
