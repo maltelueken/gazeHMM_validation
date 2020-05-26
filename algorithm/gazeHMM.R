@@ -5,10 +5,11 @@
 
 
 gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
-                               sg.order = 3, sg.length = 5, 
-                               nstates, respstart, trstart, instart, sf = c(10, 10), start.seed = NULL,
-                               fit.control = em.control(maxit = 5000, random.start = F),
-                               min.sac = 0.01) {
+                    sg.order = 3, sg.length = 5, 
+                    nstates, respstart, trstart, instart, sf = c(10, 10), 
+                    random.respstart = T, start.seed = NULL,
+                    fit.control = em.control(maxit = 5000, random.start = F),
+                    min.sac = 0.01) {
   
   source("algorithm/preprocessing.R")
   source("algorithm/model.R")
@@ -19,52 +20,34 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   # Check if starting values for response model supplied, generate random starting values if not
   
   if(missing(respstart)) {
-    if(nstates == 2) {
-      
-      respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1), angle = c(0, 2*pi)), 
-                        sac = list(vel = c(5, 5), acc = c(5, 5), angle = c(0, 10)))
-      
-    } else if(nstates == 3) {
-      
-      respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1), angle = c(0, 2*pi)), 
-                        sac = list(vel = c(5, 5), acc = c(5, 5), angle = c(0, 10)),
-                        pso = list(vel = c(5, 5), acc = c(5, 5), angle = c(pi, 10)))
-      
-    } else if(nstates == 4) {
-      
-      respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1), angle = c(0, 2*pi)), 
-                        sac = list(vel = c(5, 5), acc = c(5, 5), angle = c(0, 10)),
-                        pso = list(vel = c(5, 5), acc = c(5, 5), angle = c(pi, 10)),
-                        sp = list(vel = c(2, 2), acc = c(2, 2), angle = c(0, 2)))
-      
-    } else if(nstates == 5) {
-      
-      respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1), angle = c(0, 2*pi)), 
-                        sac = list(vel = c(5, 5), acc = c(5, 5), angle = c(0, 10)),
-                        pso = list(vel = c(5, 5), acc = c(5, 5), angle = c(pi, 10)),
-                        sp = list(vel = c(2, 2), acc = c(2, 2), angle = c(0, 2)),
-                        mic = list(vel = c(2, 2), acc = c(5, 5), angle = c(0, 10)))
-      
-    } 
     
-    respstart.rand <- lapply(1:length(respstart), function(x) {
-      lapply(1:length(respstart[[x]]), function(y) {
-        
-        if(y < 3) {
+    respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1), angle = c(0, 2*pi)), 
+                      sac = list(vel = c(10, 10), acc = c(5, 5), angle = c(0, 10)),
+                      pso = list(vel = c(5, 5), acc = c(10, 10), angle = c(pi, 10)),
+                      sp = list(vel = c(2, 2), acc = c(2, 2), angle = c(0, 2)),
+                      mic = list(vel = c(2, 2), acc = c(5, 5), angle = c(0, 10)))[1:nstates]
+    
+    if(random.respstart) {
+      
+      respstart <- lapply(1:length(respstart), function(x) {
+        lapply(1:length(respstart[[x]]), function(y) {
           
-          out <- sapply(respstart[[x]][[y]], gamma_start, 
-                        seed = start.seed[[x]][[y]])
+          if(y < 3) {
+            
+            out <- sapply(respstart[[x]][[y]], gamma_start,
+                          seed = start.seed[[x]][[y]])
+            
+          } else {
+            
+            out <- c(respstart[[x]][[y]][1], gamma_start(respstart[[x]][[y]][2],
+                                                         seed = start.seed[[x]][[y]]))
+            
+          }
           
-        } else {
-          
-          out <- c(respstart[[x]][[y]][1], gamma_start(respstart[[x]][[y]][2], 
-                                                       seed = start.seed[[x]][[y]]))
-          
-        }
-        
-        return(out)
+          return(out)
+        })
       })
-    })
+    }
   }
   
   
@@ -80,8 +63,11 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   
   # Store settings
   
-  settings <- list(x, y, t, unit, res, dim, dist, fr, blink, sg.order, sg.length, 
-                   nstates, respstart.rand, trstart, instart, sf, start.seed, fit.control, min.sac)
+  settings <- list(x = x, y = y, t = t, unit = unit, res = res, dim = dim, dist = dist, fr = fr, blink = blink, 
+                   sg.order = sg.order, sg.length = sg.length, 
+                   nstates = nstates, respstart = respstart, trstart = trstart, instart = instart, 
+                   sf = sf, random.respstart = random.respstart, start.seed = start.seed, 
+                   fit.control = fit.control, min.sac = min.sac)
   
   
   # Validate arguments
@@ -174,7 +160,7 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   
   # Model classification
   
-  model.fit <- HMM_classify(prep, nstates, respstart.rand, trstart, instart, sf, fit.control)
+  model.fit <- HMM_classify(prep, nstates, respstart, trstart, instart, sf, fit.control)
   
   
   # Postprocessing
