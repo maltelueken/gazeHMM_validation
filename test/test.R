@@ -26,9 +26,9 @@ set.seed(123)
 Eprep.fit.3 <- Eprep %>%
   dplyr::filter(block == sample(unique(Eprep$block), 1)) %>%
   group_by(subject) %>%
-  summarise(fit = list(try(classify_gaze_data(x = xp, y = yp, t = (time - time[1])/1e3, 
+  summarise(fit = list(try(gazeHMM(x = xp, y = yp, t = (time - time[1])/1e3, 
                                               unit = "px", res = res, dim = dim, fr = fr, dist = dist, 
-                                              nstates = 3)))) %>%
+                                              nstates = as.integer(3), random.respstart = F)))) %>%
   pull(fit)
 
 
@@ -98,9 +98,9 @@ D2010.fit.4 <- D2010 %>%
                 trial == sample(unique(D2010$trial), 1), 
                 condition == sample(unique(D2010$condition), 1)) %>%
   group_by(subject) %>%
-  summarise(fit = list(try(classify_gaze_data(x = x, y = y, t = (timestamp - timestamp[1])/1e6, 
-                                          unit = "px", res = res, dim = c(dim, dim), fr = fr, dist = dist,
-                                          nstates = 4)))) %>%
+  summarise(fit = list(try(gazeHMM(x = x, y = y, t = (timestamp - timestamp[1])/1e6, 
+                                          unit = "px", res = res, dim = dim, fr = fr, dist = dist,
+                                          nstates = as.integer(4), random.respstart = F)))) %>%
   pull(fit)
 
 
