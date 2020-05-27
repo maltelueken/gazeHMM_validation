@@ -115,10 +115,10 @@ postprocess <- function(data, state, min.sac) { # data frame with dependent vari
   
   # Prepare output
   
-  fixations <- data.frame(cbind(x, y, dur)[event == FIX,])
-  saccades <- data.frame(cbind(dur, amp, max.vel, max.acc, avg.vel, avg.acc, dir, start.x, start.y, end.x, end.y)[event == SAC,])
-  psos <- data.frame(cbind(dur, amp, max.vel, max.acc, avg.vel, avg.acc, start.x, start.y, end.x, end.y)[event == PSO,])
-  sps <- data.frame(cbind(dur, amp, max.vel, max.acc, avg.vel, avg.acc, dir, start.x, start.y, end.x, end.y)[event == SP,])
+  fixations <- data.frame(cbind(x, y, dur))[event == FIX,]
+  saccades <- data.frame(cbind(dur, amp, max.vel, max.acc, avg.vel, avg.acc, dir, start.x, start.y, end.x, end.y))[event == SAC,]
+  psos <- data.frame(cbind(dur, amp, max.vel, max.acc, avg.vel, avg.acc, start.x, start.y, end.x, end.y))[event == PSO,]
+  sps <- data.frame(cbind(dur, amp, max.vel, max.acc, avg.vel, avg.acc, dir, start.x, start.y, end.x, end.y))[event == SP,]
   
   output <- list(samples = as.data.frame(data), 
                  events = list(fixations = fixations, saccades = saccades, PSOs = psos, smooth.pursuits = sps))
