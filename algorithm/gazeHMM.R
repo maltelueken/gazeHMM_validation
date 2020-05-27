@@ -22,9 +22,9 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   if(missing(respstart)) {
     
     respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1), angle = c(0, 2*pi)), 
-                      sac = list(vel = c(10, 10), acc = c(5, 5), angle = c(0, 10)),
-                      pso = list(vel = c(5, 5), acc = c(10, 10), angle = c(pi, 10)),
-                      sp = list(vel = c(2, 2), acc = c(2, 2), angle = c(0, 2)),
+                      sac = list(vel = c(5, 5), acc = c(5, 5), angle = c(0, 10)),
+                      pso = list(vel = c(5, 5), acc = c(5, 5), angle = c(pi, 10)),
+                      sp = list(vel = c(2, 2), acc = c(2, 2), angle = c(0, 10)),
                       mic = list(vel = c(2, 2), acc = c(5, 5), angle = c(0, 10)))[1:nstates]
     
     if(random.respstart) {
@@ -97,7 +97,8 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   if(dist <= 0) stop("'fr' must be positive and greater than 0")
   
   if(!(is.numeric(blink) && is.vector(blink) && length(blink) == 2) && 
-     !(is.logical(blink) && is.vector(blink) && length(blink) == length(t))) stop(
+     !(is.logical(blink) && is.vector(blink) && length(blink) == length(t)) &&
+     !is.null(blink)) stop(
        "'blink' must be either a numeric vector of length 2 or a logical vector with the same length as 't'"
        )
   
