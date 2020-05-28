@@ -22,19 +22,21 @@ preprocess <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   # Check for NA and Inf and (0,0)
   
   valid <- ifelse(is.na(x) | is.na(y) | 
-                    is.infinite(x) | is.infinite(y) | 
+                    is.infinite(x) | is.infinite(y) |
                     (x == 0 & y == 0), F, T)
   
   
-  # Label blinks
+  # Initial label blinks
+  
+  inib <- rep(NA, length(x))
   
   if(is.numeric(blink) && length(blink) == 2) {
     
-    label[x == blink[1] & y == blink[2]] <- 0
+    inib[x == blink[1] & y == blink[2]] <- 0
     
   } else if(is.logical(blink) && length(blink) == length(t)) {
     
-    label[blink] <- 0
+    inib[blink] <- 0
     
   }
   
@@ -88,6 +90,18 @@ preprocess <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   
   vel <- ifelse(vel == 0, nudge, vel)
   acc <- ifelse(acc == 0, nudge, acc)
+  
+  
+  # Set +/- 50 ms around blinks to invalid
+  
+  for(i in 1:length(inib)) {
+    if(!is.na(inib[i])) {
+      
+      valid[t > (t[i]-0.05) & t <= (t[i]+0.05)] <- F
+      label[t > (t[i]-0.05) & t <= (t[i]+0.05)] <- 0
+      
+    }  
+  }
   
   
   # Remove outliers
