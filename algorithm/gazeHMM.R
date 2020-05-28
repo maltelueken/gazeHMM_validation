@@ -21,11 +21,11 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   
   if(missing(respstart)) {
     
-    respstart <- list(fix = list(vel = c(1, 1), acc = c(1, 1), angle = c(0, 2*pi)), 
-                      sac = list(vel = c(5, 5), acc = c(5, 5), angle = c(0, 10)),
-                      pso = list(vel = c(5, 5), acc = c(5, 5), angle = c(pi, 10)),
-                      sp = list(vel = c(2, 2), acc = c(2, 2), angle = c(0, 10)),
-                      mic = list(vel = c(2, 2), acc = c(5, 5), angle = c(0, 10)))[1:nstates]
+    respstart <- list(fix = list(vel = c(10, 10)/sf[1], acc = c(10, 10)/sf[2], angle = c(0, 2*pi)), 
+                      sac = list(vel = c(50, 50)/sf[1], acc = c(50, 50)/sf[2], angle = c(0, 10)),
+                      pso = list(vel = c(50, 50)/sf[1], acc = c(50, 50)/sf[2], angle = c(pi, 10)),
+                      sp = list(vel = c(20, 20)/sf[1], acc = c(20, 20)/sf[2], angle = c(0, 10)),
+                      mic = list(vel = c(20, 20)/sf[1], acc = c(50, 50)/sf[2], angle = c(0, 10)))[1:nstates]
     
     if(random.respstart) {
       
