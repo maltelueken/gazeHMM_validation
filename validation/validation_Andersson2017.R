@@ -139,7 +139,7 @@ A2017.fit <- lapply(1:length(A2017), function(stim) parLapply(clust, 1:length(A2
     
     fit[[as.character(k)]] <- try(gazeHMM(x = df$x, y = df$y, t = df$t, unit = "px",
                                           res = res, dim = dim, dist = dist, fr = fr, blink = c(0, 0),
-                                          nstates = k, trstart = trstart, random.respstart = F, 
+                                          nstates = k, sf = c(100, 100), trstart = trstart, random.respstart = F, 
                                           start.seed = start.seed, min.sac = 0.01))
     
   }
@@ -189,7 +189,7 @@ A2017.bic <- lapply(A2017.fit, function(stim) {
   return(df)
 })
 
-lapply(A2017.fit, function(x) lapply(x, function(y) try(print(plot_samples_time(y[["4"]])))))
+lapply(A2017.fit, function(x) lapply(x, function(y) try(print(plot_samples_time(y[["2"]])))))
 
 
 # Calculate event descriptives for human coders
@@ -319,7 +319,7 @@ A2017.rmsd <- lapply(1:length(A2017.fit), function(x) {
 
 # Calculate agreement with human raters
 
-k <- 3
+k <- 4
 
 A2017.acc <- lapply(1:length(A2017.fit), function(x) { 
   out <- lapply(1:length(A2017.fit[[x]]), function(y) {
