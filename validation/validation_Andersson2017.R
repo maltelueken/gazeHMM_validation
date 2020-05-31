@@ -92,6 +92,8 @@ for(i in c("dots", "img", "video")) {
   }, x = data.MN, y = data.RA)
 }
 
+save(A2017, file = "validation/Andersson2017_raw.Rdata")
+
 
 # Classify data
 
