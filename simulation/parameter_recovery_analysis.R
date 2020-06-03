@@ -602,3 +602,71 @@ plots.err.234 <- lapply(1:3, function(y, data) {
 }, data = acc.data.234)
 
 print(plots.err.234[[1]])
+
+
+# Exploratory analysis label switching ------------------------------------
+
+library(psych)
+
+load("simulation/part3_expl.Rdata")
+
+labsw <- lapply(1:length(estimates.3), function(x) {
+  lapply(estimates.3[[x]], function(y) {
+    lapply(y, function(z) {
+      
+      kappa <- try(cohen.kappa(z$states)$kappa)
+      
+      states <- z$states
+      
+      if(x == 2 & is.numeric(kappa) & kappa < 0.95) {
+          
+        states$y <- ifelse(z$states$y == 3, 2, ifelse(z$states$y == 2, 3, z$states$y))
+          
+        kappa <- cohen.kappa(states)$kappa
+        
+        if(is.numeric(kappa) & kappa < 0.95) {
+          
+          states$y <- ifelse(z$states$y == 3, 1, ifelse(z$states$y == 1, 3, z$states$y))
+          
+          kappa <- cohen.kappa(states)$kappa
+        }
+        
+        if(is.numeric(kappa) & kappa < 0.95) {
+          
+          states$y <- ifelse(z$states$y == 3, 2, ifelse(z$states$y == 1, 3, 1))
+          
+          kappa <- cohen.kappa(states)$kappa
+        }
+      }
+      
+      if(x == 3 & is.numeric(kappa) & kappa < 0.5) {
+        
+        states$y <- ifelse(z$states$y == 3, 2, ifelse(z$states$y == 2, 3, z$states$y))
+        
+        kappa <- cohen.kappa(states)$kappa
+        
+        if(is.numeric(kappa) & kappa < 0.5) {
+
+          states$y <- ifelse(z$states$y == 3, 4, ifelse(z$states$y == 4, 3, z$states$y))
+
+          kappa <- cohen.kappa(states)$kappa
+        }
+
+        if(is.numeric(kappa) & kappa < 0.5) {
+
+          states$y <- ifelse(z$states$y == 3, 1, ifelse(z$states$y == 1, 3, z$states$y))
+
+          kappa <- cohen.kappa(states)$kappa
+        }
+        
+        if(is.numeric(kappa) & kappa < 0.5) {
+          
+          kappa <- cohen.kappa(z$states)$kappa
+        }
+      }
+      
+      return(kappa)
+    })
+  })
+})
+
