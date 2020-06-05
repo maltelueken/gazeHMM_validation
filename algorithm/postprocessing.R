@@ -21,6 +21,8 @@ postprocess <- function(data, state, min.sac) { # data frame with dependent vari
   
   valid <- !is.na(data$vel) & !is.na(data$acc) & !is.na(data$angle)
   
+  state[!valid] <- 0
+  
   
   # Relabel samples
   
@@ -109,7 +111,7 @@ postprocess <- function(data, state, min.sac) { # data frame with dependent vari
   }
   
   data$state <- state
-  data$label[is.na(data$label)] <- label[is.na(data$label)] # only labels for valid samples
+  data$label <- label
   data$event <- number
   
   
