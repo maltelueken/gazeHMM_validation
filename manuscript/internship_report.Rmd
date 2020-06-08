@@ -37,7 +37,7 @@ abstract: |
 keywords          : "keywords"
 wordcount         : "X"
 
-floatsintext      : no
+floatsintext      : yes
 figurelist        : no
 tablelist         : no
 footnotelist      : no
@@ -52,16 +52,26 @@ output            : papaja::apa6_pdf
 
 ```{r setup, include=FALSE}
 
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = "asis")
 
 dir <- "~/Uni/Psychologie Master/Internship/GazeHMM"
 
+library(papaja)
 library(tidyverse)
-require(signal)
+library(signal)
 library(flexcircmix)
+library(CircStats)
+library(depmixS4)
 source(paste(dir, "algorithm/preprocessing_helper_functions.R", sep = "/"))
 
 ```
+
+```{r set graphics theme, include=FALSE}
+
+theme_set(theme_apa())
+
+```
+
 
 ```{r load data, include=FALSE}
 
@@ -74,7 +84,6 @@ fr <- 500
 
 ```
 
-
 # Algorithm Development
 
 As part of answering my research questions, I developed an algorithm named *gazeHMM* to classify gaze data into discrete eye movement events. The following section describes the development of gazeHMM and its final version that has been used to obtain results. Technical details can be found in the Technical Appendix.
@@ -82,21 +91,17 @@ As part of answering my research questions, I developed an algorithm named *gaze
 
 ## Eye movement metrics
 
-Many different metrics can be used to describe gaze data and eye movement events (Zemblys et al.). For classifcation, the goal is to find those metrics that separate the gaze data samples belonging to different events the best. However, many metrics rely on thresholds or window ranges that have to be set by the user (Zemblys et al.). Since not relying on parameter settings by the user was one criterion for choosing metrics, I excluded them from the decision process. Finally, I chose to use three metrics that have been used in previous algorithms: velocity, acceleration, and sample-to-sample angle (e.g., Larsson et al., Pekkanen and Lappi). The reasons to chose these three are mainly theoretical. Figure X displays the theoretically expected distributions of samples belonging to different eye movement events. Fixations typically inherit samples with low velocity and acceleration (CITE). Due to tremor, the angle between samples should not follow any direction but a random walk (CITE). In contrast, saccade samples usually have a high velocity and acceleration and follow the same direction (CITE). PSO samples tend to have moderate velocity and high acceleration since they occur between high velocity saccades and low velocity fixations. They are specifically distinguished by their change in direction around 180° (CITE). Lastly, smooth pursuit samples have a moderate velocity but low acceleration (due to the smoothness) and like saccades they follow the same direction (CITE). In sum, velocity, acceleration, and sample-to-sample angle should theoretically separate eye movement events well.
-
-```{r, theoretical event sample distributions, results='asis'}
-
-
-
-```
-
+Many different metrics can be used to describe gaze data and eye movement events (Zemblys et al.). Here, the goal is to find those metrics that separate the gaze data samples belonging to different events the best. However, many metrics rely on thresholds or window ranges that have to be set by the user (e.g., the distance between the mean position in a 100 ms window before and after each sample, see Olsson, 2007, and Zemblys et al.). This can be problematic because these parameters are often set without theoretical justification and they differ substantially between metrics. Since I proposed to choose metrics that do not rely on such user settings, I used velocity, acceleration, and sample-to-sample angle as metrics in gazeHMM.  
+Theoretically, these three metrics should separate eye movement events clearly. Fixations typically inherit samples with low velocity and acceleration (CITE). Due to tremor, the angle between samples should not follow any direction but a random walk (CITE). In contrast, saccade samples usually have a high velocity and acceleration and follow the same direction (CITE). PSO samples tend to have moderate velocity and high acceleration since they occur between high velocity saccades and low velocity fixations. They are specifically distinguished by their change in direction clustered around 180° (CITE). Lastly, smooth pursuit samples have a moderate velocity but low acceleration (due to the smoothness) and like saccades they follow the same direction (CITE).
 
 
 ## Fitering and smoothing
 
-Like metrics, many methods can be used to filter or smooth gaze data before, while, or after computing eye movement metrics. Their purpose is to remove noise or artifacts from the gaze data that could distort the classification (CITE). Filtering (smoothing) methods that are applied before computing the eye movement metrics target the recorded gaze position. Unfortunately, this might also erase differences in the metrics between samples. For instance, tremor movements during fixations would be filtered out and in consequence, the angle of the samples would stay the same. This would make it harder for the algorithm to separate fixations from smooth pursuits. The same phenomenon would apply to PSOs and saccades (see Figure X).  
+As with metrics, many methods can be used to filter or smooth gaze data before, while, or after computing eye movement metrics. Their purpose is to remove noise or artifacts from the gaze data that could distort the classification (CITE). Filtering (smoothing) methods that are applied before computing the eye movement metrics target the recorded gaze position. Unfortunately, this might also erase differences in the metrics between samples. For instance, tremor movements during fixations would be filtered out and, in consequence, the samples would follow the same direction. This would make it harder for the algorithm to separate fixations from smooth pursuits. The same problem applies to PSOs and saccades where filtering could erase the oscillations (see Figure \@ref(fig:filter-angle)).  
 
-```{r, filtering example, results='asis'}
+(ref:filter-angle) Example data from Andersson et al. (2017) displayed as sample-to-sample angle (in rad) over time (in s). Line color indicates whether the positional data has been filtered before computing the sample-to-sample angle (red) or not (blue). For this example, I used a Butterworth filter of order three and a normalized cutoff frequency of 0.3.
+
+```{r, filter-angle, results='asis', fig.cap="(ref:filter-angle)"}
 
 filter.ex <- A2017$video[[3]] %>%
   mutate(x = px2va(x, dim[1], res[1], dist),
@@ -111,14 +116,16 @@ filter.ex <- A2017$video[[3]] %>%
 ggplot(filter.ex) + 
   geom_path(aes(x = t, y = force_neg_pi_pi(angle)), color = "blue") +
   geom_path(aes(x = t, y = force_neg_pi_pi(angle.filt)), color = "red") +
-  scale_y_circular(units = "radians", limits = c(-pi, pi))
+  scale_y_circular(name = "Sample-to-sample angle (in rad)", units = "radians", limits = c(-pi, pi)) +
+  scale_x_continuous(name = "Time (in s)")
 
 ```
 
+Instead of filtering before computing the metrics, I decided to combine both in one step. Previous algorithms have used two methods that both filter and compute derivatives of the gaze position (i.e., velocity and acceleration). (CITE) compute the first and second discrete derivative (similar to a Sobel and Laplace filter, respectively, CITE) of the gaze position to be used by their algorithm. Similarly, (CITE) use a Savitzky-Golay (SG) filter (CITE) to estimate velocity and acceleration from a gaze signal. Figure \@ref(fig:filter-comparison) displays velocity and acceleration signals obtained by both methods. They follow a similar trend, but the SG velocity signal is less noisy and, consequently, the SG acceleration signal is lower than the Laplace acceleration signal. I chose to implement the SG filter to compute velocity and acceleration signals, because it filters out more noise than the discrete derivatives but still preserves the edges in the signal to distinguish between events. To preserve motor noise in the change in angle signal, gazeHMM computes the first discrete derivative of sample angle directly (see Technical Appendix).
 
-Instead of filtering before computing the metrics, I decided to combine both in one step. Previous algorithms have used two methods that both filter (smooth) and compute derivatives of the gaze position (i.e., velocity and acceleration). (CITE) compute the first and second discrete derivative (similar to a Sobel and Laplace filter, respectively, CITE) of the gaze position to be used by their algorithm. Similarly, (CITE) use a Savitzky-Golay (SG) filter (CITE) to estimate velocity and acceleration from a gaze signal. Figure X displays velocity and acceleration signals obtained by both methods. They follow a similar trend, but the SG velocity signal is less noisy and consequently, the SG acceleration signal is lower than the Laplace acceleration signal. I chose to implement the SG filter to compute velocity and acceleration signals, because it filters out more noise than the discrete derivatives but still preserves the edges in the signal to distinguish between events. To preserve motor noise in the change in angle signal, gazeHMM uses a Sobel filter to compute the first discrete derivative of sample angle.
+(ref:filter-comparison) Example data from Andersson et al. (2017) displayed as velocity (deg/seconds) and acceleration (in deg/s^2) over time (in s). Line colors indicate which filter has been used to derive the signal. Savitzky-Golay filters were applied with order three and length five (corresponding to 10 ms).
 
-```{r, filter comparison, results='asis'}
+```{r, filter-comparison, results='asis', fig.cap="(ref:filter-comparison)"}
 
 filter.comp <- A2017$video[[3]] %>%
   mutate(x = px2va(x, dim[1], res[1], dist),
@@ -136,53 +143,46 @@ filter.comp <- A2017$video[[3]] %>%
          acc.y.lp = lead(y) - 2*y + lag(y),
          acc.lp = sqrt(acc.x.lp^2 + acc.y.lp^2)*fr^2,
          t = (t-t[1])/1e6) %>%
-  pivot_longer(c("vel.sg", "vel.sb", "acc.sg", "acc.lp"), names_to = c("metric", "filter"), names_sep = "[:punct:]") %>%
+  pivot_longer(c("vel.sg", "vel.sb", "acc.sg", "acc.lp"), names_to = c("metric", "filter"), names_sep = "[:punct:]", ) %>%
+  mutate_at(c("metric", "filter"), as.factor) %>%
   dplyr::filter(t > 0.5, t < 1.5)
 
+filter.comp$metric <- factor(filter.comp$metric, labels = c("Acceleration", "Velocity"))
+
 ggplot(filter.comp, aes(x = t, y = value, color = filter)) + 
-  geom_path() + facet_grid(rows = vars(metric), scales = "free_y")
+  geom_path() + facet_wrap(vars(metric), nrow = 2, scales = "free_y", strip.position = "left") + 
+  scale_x_continuous(name = "Time (in s)") +
+  scale_y_continuous(name = "") +
+  scale_color_discrete(name = "Filter", labels = c("Laplace", "Sobel", "Savitzky-Golay")) +
+  theme(strip.placement = "outside")
+  
 
 ```
 
 
 ## The generative model
 
-The generative model underlying gazeHMM is a multivariate hidden Markov model (HMM). It can have between two and four states that correspond to different eye movement events (see Table X). Thus, users can choose wether they would like to classify only fixations and saccades, or additionally PSOs and/or smooth puruits.  
+The generative model underlying gazeHMM is a multivariate hidden Markov model (HMM). It can have between two and four states that correspond to different eye movement events: The first state always represents fixations, the second saccades, the third PSOs, and the fourth smooth pursuits. Thus, users can choose wether they would like to classify only fixations and saccades, or additionally PSOs and/or smooth puruits.  
+In general, HMMs consist of three submodels: An initial state model, a transition model, and a response model (CITE). In gazeHMM, the response model consists of three response variables which are the velocity and acceleration signals obtained by the SG filter and the change in angle signal. The response variables are treated as conditionally independent on the states. I acknowledge that conditional independence might not accurately resemble the relationship between velocity and acceleration (which are naturally correlated). This step was taken merely to keep the HMM simple and identifyable.  
+Previous algorithms using HMMs have used Gaussian distributions to describe velocity and acceleration signals (sometimes after log-transforming them). However, several reasons speak against choosing the Gaussian: First, both signals are usually positive (depending on the computation) and due to noise above zero. Second, the distributions of both signals appear to be positively skewed conditionally on the states and, third, to have variances increasing with their mean. Thus, instead of using the Gaussian, it could be more appropriate to describe velocity and acceleration with a distribution that follows these three properties. In gazeHMM, I use gamma distributions with a shape and scale parametrization for this purpose. It has to be noted that the gamma was choosen because of convenience and the best fitting distribution might be different between subjects and tasks.   
+To model the sample-to-sample angle, I pursued a novel approach in gazeHMM: Using a mixture of von-Mises distributions (with a mean and concentration parameter) and a uniform distribution to model the derivative of sample angle. Both the distributions and the metric operate on the full unit circle (i.e., between 0 and $2\pi$) which should lead to rather symmetric distributions. Moreover, the uniform distribution can distinguish fixations from the other events.  
+The initial state model and the transition model used multinomial distributions (with a category for each state). For all three submodels of the HMM, only parameter intercepts were estimated.
 
-In general, HMMs consist of three submodels: An initial state model, a transition model, and a response model (CITE). In gazeHMM, the response model consists of three response variables which are the velocity and acceleration signals obtained by the SG filter and the change in angle signal obtained by the Sobel filter. The response variables are treated as independent conditional on the states. I acknowledge that conditional independence might not accurately resemble the relationship between velocity and acceleration (which are naturally correlated). This step was taken merely to keep the HMM simple and identifyable.  
 
-Previous algorithms using HMMs have used Gaussian distributions to describe velocity and acceleration signals (sometimes after log-transforming them). However, several reasons speak against choosing the Gaussian: First, both signals are usually positive (depending on the computation) and due to noise above zero. Second, the distributions of both signals appear to be positively skewed conditionally on the states and, third, have variances increasing with their mean. Thus, instead of using the Gaussian, it could be more appropriate to describe velocity and acceleration with a distribution that follows these three properties. In gazeHMM, I use gamma distributions with a shape and scale parametrization for this purpose. However, it has to be noted the gamma was choosen because of convenience and the best fitting distribution might be different between subjects and tasks.   
+## Missing data and blinks
 
-To model the sample-to-sample angle, CITE described the Fisher-transformed cosine of sample angle with a Gaussian distribution. This approach can be problematic because the cosine of sample angle only ranges between -1 and 1 (corresponding to angles of $\pi$ and 0). Thus, it only operates on half of the unit circle and $\cos(\frac{1}{2}\pi) = \cos(\frac{3}{2}\pi)$. This property can be desirable if one is only interested in expression angles between 0 and $\pi$ (which is in event classification). However, the sample-to-sample angle distributions for the different events will also be skewed having their modes at 0 (for saccades and smooth pursuits) or $\pi$ (for PSOs). This consequence makes the Fisher-transformation and Gaussian not the best choices. Instead, I pursued a novel approach in gazeHMM: Using a mixture of von-Mises distributions (with a mean and concentration parameter) and a uniform distribution to model the derivative of sample angle. Both the distributions and the metric operate on the full unit circle (i.e., between 0 and $2\pi$) which should lead to rather symmetric distributions. Moreover, the uniform distribution can distinguish fixations from the other events.
-
-```{r angle distributions, results="asis"}
-
-angle.dist <- A2017$video[[3]] %>%
-  mutate(x = px2va(x, dim[1], res[1], dist),
-         y = px2va(y, dim[2], res[2], dist),
-         angle.full = force_neg_pi_pi(calc_theta(x, y)),
-         #angle.full = force_neg_pi_pi(atan2(y - lag(y), x - lag(x))),
-         cos.angle = cos(angle.full),
-         z.trans = atanh(cos.angle),
-         t = (t-t[1])/1e6) %>%
-  pivot_longer(c("angle.full", "cos.angle", "z.trans"), names_to = "method") %>%
-  dplyr::filter(t > 0.5, t < 0.75)
-
-ggplot(angle.dist, aes(x = t, y = value)) + geom_path() + facet_grid(rows = vars(method), scales = "free")
-
-```
-
-To describe the initial state model and the transition model I used multinomial distributions (with a category for each state). For all three submodels of the HMM, only parameter intercepts were estimated.
+HMMs can estimate parameters and hidden states despite missing data. They either treat data as missing at random or as missing dependent on states (Visser & Speekenbrink). In gazeHMM, I assumed data to be missing at random. Most of the missing data in eye movement classification are due to blinks. The user can indicate in gazHMM which samples should be labeled as blinks (other missing samples are treated as noise). Often, eye-trackers record a few samples with unreasonably high velocity and acceleration before losing the pupil signal when a blink occurs. Since these samples could distort the classification of saccades in the HMM, I decided to remove them heuristically. Before classifying the samples, gazeHMM sets all samples within 50 ms before and after blink samples as missing. The window of 50 ms was rather motivated empirically than theoretically and can bet set to any value the user considers appropriate.  
+When evaluating the likelihood of the HMM given parameters and the joint density of response distributions for missing data, the model integrates over all possible values. The resulting density for missing samples is therefore set to one (Visser & Speekenbrink).
 
 
 ## Optimization and classification
 
-The paramters of the HMM are estimated through maximum likelihood using an expectation-maximization (EM) algorithm (EM CITE). The EM is generally suitable to estimate likelihoods with missing variables. For HMMs, it imputes missing with expected values and iteratively maximizes the joint likelihood of parameters conditional on the observed data (velocity, acceleration, and sample-to-sample angle) and the expected hidden states (eye movement events; Visser & Speekenbrink). The sequence of hidden states is estimated through the Viterbi algorithm (CITE) by maximizing the posterior state probability (Visser & Speekenbrink). Parameters of the response distributions (except for the uniform distribution) were optimized on the log-scale (except for the mean parameter of the von-Mises distribution) using a spectral projected gradient method (CITE) and Barzilai-Borwein steplengths (CITE).
+The paramters of the HMM are estimated through maximum likelihood using an expectation-maximization (EM) algorithm (CITE). The EM is generally suitable to estimate likelihoods with missing variables. For HMMs, it imputes missing with expected values and iteratively maximizes the joint likelihood of parameters conditional on the observed data (velocity, acceleration, and sample-to-sample angle) and the expected hidden states (eye movement events; Visser & Speekenbrink). The sequence of hidden states is estimated through the Viterbi algorithm (CITE) by maximizing the posterior state probability (Visser & Speekenbrink). Parameters of the response distributions (except for the uniform distribution) were optimized on the log-scale (except for the mean parameter of the von-Mises distribution) using a spectral projected gradient method (CITE) and Barzilai-Borwein steplengths (CITE).
 
 
 ## Postprocessing
 
-Eye movement events usually obey certain theoretical (e.g., PSOs only follow saccades) and practical constraints (e.g., eye-tracking resolutions) (CITE). However, constraining the parameter estimation in gazeHMM led mostly to unreasonable results or did not improve the classification. For example, constraining the transition probabilities for PSOs to turn into non-saccade events to zero often caused PSOs not to appear in the classification output at all. Moreover, I could not explicitly control the duration of events in the HMM which ocassionally led to unreasonable short events. In consequence, I implemented a postprocessing routine in gazeHMM to heuristically compensate for such violations. This routine relabels one-sample fixations and smooth pursuits, saccades with a duration below a minimum threshold, and PSOs that follow non-saccade events as the previous event.
+After classifying gaze samples into states, gazeHMM applies a postprocessing routine to the estimated state sequence. I implemented this rountine because constraining the transition probabilities for PSOs to turn into non-saccade events to zero often caused PSOs not to appear in the state sequence at all. Moreover, gazeHMM did explicitly control the duration of events in the HMM which ocassionally led to unreasonably short events. Thus, the postprocessing routine heuristically compensates for such violations. This routine relabels one-sample fixations and smooth pursuits, saccades with a duration below a minimum threshold, and PSOs that follow non-saccade events. Samples were relabeled as the state of the previous event. Finally, samples initially indicated as missing were labeled as noise (including blinks) and event metrics were computed (e.g., fixation durations).
 
 
 ## Implementation
@@ -190,8 +190,622 @@ Eye movement events usually obey certain theoretical (e.g., PSOs only follow sac
 The algorithm is implemented in R (version 3.6.3; CITE) and uses the packages signal (CITE) to compute velocity and acceleration signals, dplyr (CITE) to calculate sample-to-sample angles, depmixS4 (CITE) for the HMM, and BB (CITE) for Barzilai-Borwein spectral projected gradient optimization. The algorithm will be available on Github (LINK).
 
 
-# Simulation Study Design
+# Simulation Study
 
+To assess how well the HMM recovers parameters and state sequences, I conducted a simulation study. The design and analysis of the study were preregistered on OSF (LINK). The major part of this section is a direct copy of that preregistration. When appropriate, additional explanations were added and tenses adapted to make the design easier to read and understand.  
+In the study, the HMM repeatedly generated data with a set of parameters (true parameter values). The same model was then be applied to estimate the parameters from the generated data (estimated parameter values). I compared the true with the estimated parameter values to assess whether a parameter was recovered by the model. Additionally, I compared the true states of the HMM with the estimated states to judge how accurately the model recovered the states that generated the data.  
+
+
+## Design
+### Parameter Variation
+
+The simulation study was divided into four parts. In the first part, I varied the parameters of the HMM. For models with $k \in \{2, 3, 4\}$ states, $q \in \{10, 15, 20\}$ parameters were varied respectively. For each parameter, the HMM generated 100 data sets with $N = 2500$ samples and the parameter varied in a specified interval in equidistant steps. This resulted in $100 \times (10+15+20) = 4500$ recoveries. Only one parameter was varied at once, the other parameters were set to their default values. All parameters of the HMM were estimated freely (i.e., there were no fixed parameters in the model). I did not manipulate the initial state probabilities because these are usually irrelevant in the context of eye movement classification. For the transition probabilities, I only simultaneously varied the probabilities for staying in the same state (diagonals of the tranistion matrix) to reduce the complexity of the simulation. The left over probability mass was split evenly between the probabilites for switching to a different state (per row of the transition matrix). Moreover, I did not modify the mean parameters of the von-Mises distributions: As location parameters, they do not alter the shape of the distribution and they are necessary features for the HMM to distinguish between different states.  
+I defined approximate ranges for each response variable and chose true parameter intervals and default values so that they produced samples that roughly corresponded to these ranges. Table \@ref(tab:sim-ranges) shows the assumed ranges for each event and Table X shows the intervals and default values for each parameter in the simulation. Parameters were scaled down by factor 10 (compared to the reported ranges) to improve fitting of the gamma distributions. I set the intervals for shape parameters of the gamma distributions for all events to [1,5] to examine how skewness influenced the recovery (shape values above five approach a symmetric distribution). The scale parameters were set so that the respective distribution approximately matched the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they were varied on the inverse scale. 
+
+
+### Sample Size and Noise Variation
+
+In the second part, I varied the sample size of the generated data and the amount of noise added to it. The model parameters were set to their default values. For models with $k \in \{2, 3, 4\}$ states and sample sizes of $N \in \{500, 2500, 10000\}$, I generated 100 data sets ($100 \times 3 \times 3 = 900$ recoveries). These samples sizes roughly corresponded to small, medium, and large eye-tracking data sets for a single participant and trial. To simulate noise, I replaced velocity and acceleration values $y$ with draws from a gamma distribution with $\alpha_{noise} = 3$ and $\beta_{noise}=(y/2)\tau_{noise}$ with $\tau_{noise} \in [1,5]$ varying between data sets. This procedure ensured that velocity and acceleration values remained positive and were drawn from moderately skewed distributions with modes equal to the original values. To angle, I added white noise from a von-Mises distribution with $\mu_{noise} = 0$ and $\kappa_{noise} \in 1/[0.1,10]$ varying between data sets. $\tau_{noise}$ and $\kappa_{noise}$ were varied simultaneously in equidistant steps in their intervals.
+
+
+### Variation of Starting Values
+
+In the third part, I increased the variation in the starting values used for parameter estimation. The model parameters were set to their default values. For the shape, scale, and concentration parameters, I simultaneously increased the scale parameters of the starting value gamma distributions: For $k \in \{2, 3, 4\}$ states and $\beta_{start} = (\psi_{true}/2)\tau_{start}$ with $\tau_{start} \in \{1, 2, 3\}$, 100 data sets with $N = 2500$ samples were generated each ($100 \times 3 \times 3 = 900$ recoveries).
+
+
+### Missing data
+
+In the last part, I set intervals of the generated data to be missing. The model parameters were set to their default values. For $k \in \{2, 3, 4\}$ states and $m \in \{1, 3, 5\}$ intervals, 100 data sets with $N = 2500$ samples were generated ($100 \times 3 \times 3 = 900$ recoveries). The length of the missing data interval $l \in [1,200]$ samples varied in equidistant steps between the data sets.
+
+
+## Starting values
+
+The HMM always started with a uniform distribution to estimate the initial state and state transition probabilities. To generate random starting values for the estimation of shape, scale, and concentration parameters, I used gamma distributions with a shape parameter of $\alpha_{start}=3$ and $\beta_{start}=\psi_{true}/2$ with $\psi_{true}$ being the true value of the parameter to be estimated. This setup ensured that the starting values were positive, their distributions were moderately skewed, and the modes of their distributions equaled the true parameter values. Mean parameters of the von-Mises distribution always started at their true values.
+
+
+## Data analysis
+
+For each parameter, I calculated the root median square proportion deviation [RMdSPD; analogous to root median square percentage errors, see @Hyndman2006] between the true and estimated parameter values[^1]: $$RMdSPD = \sqrt{Med((\frac{\psi_{true}-\psi_{est}}{\psi_{true}})^2)}.$$
+I treated $RMdSPD < 0.1$ as good, $0.1 \le RMdSPD < 0.5$ as moderate, and $RMdSPD \ge 0.5$ as bad recovery of a parameter. By taking the median, I reduced the influence of potential outliers in the estimation and using proportions enabled me to compare RMdSPD values across parameters and data sets.  
+Additionally, I applied a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval in Part 1. Regression slopes closer to one indicated that the model better captured parameter change. Regression intercepts different from zero reflected a bias in parameter estimation.   
+To assess state recovery, I computed Cohen's kappa (for all events taken together, not for each event separately) as a measure of agreement between true and estimated states for each generated data set. Higher kappa values were interpreted as better model accuracy. I adopted the ranges proposed by @Landis1977 to interpret kappa values.
+Models that can not be fitted were excluded from the recovery.
+
+[^1]: This measure is only appropriate when $\psi_{true} \ne 0$. This was not the case for some mean parameters of the von-Mises distributions. In those cases, I used $\psi_{true} = 2\pi$ instead.
+
+(ref:sim-ranges) Approximate ranges of response variables used to generate parameter values
+(ref:sim-ranges-note) Units are °/s (velocity), °/s^2^ (acceleration), and radians (angle). ~ indicates that the distribution has a peak at this value. Velocity ranges are based on event velocities reported in @Larsson2013. Since I would also like to test the algorithm on extreme data distributions, I extended the ranges beyond those found in typical eye movement data.
+
+```{r, sim-ranges}
+
+apa_table(data.frame("Event" = rep(c("Fixation", "Saccade", "PSO", "Smooth pursuit"), each = 3),
+                     "Resp. variable" = rep(c("Velocity", "Acceleration", "Angle"), 4),
+                     "Range" = c("0-50", "0-50", "uniform", "50-1000", "50-500", "~0", "20-100", "10-90", paste("~", expression(pi), sep = ""), "20-100", "0-30", "~0")), 
+          caption = "(ref:sim-ranges)",
+          note = "(ref:sim-ranges-note)")
+
+```
+
+Table X  
+
+*HMM parameter values used to generate data*
+
+|State|Parameter|Interval|Default|Description|
+|-----|---------|--------|-----|-----------|
+|1-4|$\rho_i^*$|-|$1/k$|Initial state probability for starting in state *i*|
+|1-4|$a_{i=j}$|[.01,.99]|0.9|Transition probability for staying in the previous state *i*|
+|1-4|$a_{i \neq j}$|$(1-a_{i=j})/(k-1)$|$0.1/(k-1)$|Transition probability for switching to from state *i* to a different state *j*|
+|1|$\alpha_{vel}$|[1,5]|3|Shape parameter of the velocity gamma distribution|
+|1|$\beta_{vel}$|[0.1,0.6]|0.35|Scale parameter of the velocity gamma distribution|
+|1|$\alpha_{acc}$|[1,5]|3|Shape parameter of the acceleration gamma distribution|
+|1|$\beta_{acc}$|[0.05,0.25]|0.15|Scale parameter of the acceleration gamma distribution|
+|1|$min^*$|-|0|Minimum of the uniform distribution|
+|1|$max^*$|-|$2\pi$|Maximum of the uniform distribution|
+|2|$\alpha_{vel}$|[1,5]|3||
+|2|$\beta_{vel}$|[5,15]|10||
+|2|$\alpha_{acc}$|[1,5]|3||
+|2|$\beta_{acc}$|[1,5]|3||
+|2|$\mu^*$|-|0|Mean parameter of the von-Mises distribution|
+|2|$\kappa$|$1/[0.1,10]$|1|Concentration parameter of the von Mises distribution
+|3|$\alpha_{vel}$|[1,5]|3||
+|3|$\beta_{vel}$|[0.5,1.5]|1||
+|3|$\alpha_{acc}$|[1,5]|3||
+|3|$\beta_{acc}$|[1,5]|3||
+|3|$\mu^*$|-|$\pi$||
+|3|$\kappa$|$1/[0.1,10]$|1||
+|4|$\alpha_{vel}$|[1,5]|3||
+|4|$\beta_{vel}$|[0.5,1.5]|1||
+|4|$\alpha_{acc}$|[1,5]|3||
+|4|$\beta_{acc}$|[0.05,0.25]|0.15||
+|4|$\mu^*$|-|0||
+|4|$\kappa$|$1/[0.1,10]$|1||
+
+*Note*. Parameters marked with $^*$ will not be varied but always set to their default values. *k* is the number of states in the model.
+
+```{r sim results and helper functions, include=FALSE}
+
+# Load simulation results
+
+for (part in 1:4) {
+  
+  load(file = paste("~/Uni/Psychologie Master/Internship/GazeHMM/simulation/part", part, ".Rdata", sep = ""))
+  
+}
+
+
+# Create functions to apply and invert mlogit link function (from depmixS4, Visser & Speekenbrink, 2019)
+
+linkfun <- function(p, base) {
+  lfun <- function(p, base) {
+    p <- p/sum(p)
+    beta <- numeric(length(p))
+    if (any(p == 1)) 
+      beta[which(p == 1)] = Inf
+    else beta[-base] <- log(p[-base]/p[base])
+    return(beta)
+  }
+  if (is.matrix(p)) {
+    beta <- t(apply(p, 1, lfun, base = base))
+  }
+  else {
+    beta <- lfun(p, base)
+  }
+  return(beta)
+}
+
+linkinv <- function(eta,base) {
+  linv <- function(eta,base) {
+    pp <- numeric(length(eta))
+    if(any(is.infinite(eta)) || any(eta > log(.Machine$double.xmax)) || any(eta < log(.Machine$double.xmin))) {
+      pp[which(is.infinite(eta))] <- 1
+      pp[which(eta > log(.Machine$double.xmax))] <- 1 # change this to something better!
+    } else {
+      expb <- exp(eta)
+      sumb <- sum(expb)
+      pp[base] <- 1/sumb
+      pp[-base] <- expb[-base]/sumb
+    }
+    return(pp)
+  }
+  if(is.matrix(eta)) {
+    if(ncol(eta)==1) {
+      pp <- as.matrix(apply(eta,1,linv,base=base)) # fixes problem with column matrix eta
+    } else pp <- t(apply(eta,1,linv,base=base)) 	
+  } else {
+    pp <- linv(eta,base)
+  }
+  return(pp)
+}
+
+
+# Create function to transform parameters to normal scale
+
+backtrans <- function(x) {
+  
+  out <- x
+  
+  nms <- names(x)
+  
+  out[str_detect(nms, "(Intercept)")] <- as.vector(apply(matrix(x[str_detect(nms, "(Intercept)")],
+                                                        ncol = sqrt(length(x[str_detect(nms, "(Intercept)")])),
+                                                        byrow = T), 1, linkinv, base = 1))
+  
+  out[nms %in% c("shape", "scale", "kappa")] <- exp(x[nms %in% c("shape", "scale", "kappa")])
+  
+  return(out)
+}
+
+```
+
+```{r calculate RMdSPD, include=FALSE}
+
+rmsd <- list()
+
+for (part in 1:4) {
+  
+  rmsd[[part]] <- lapply(get(paste("estimates.", part, sep = "")), function(x) {
+    lapply(x, function(y) {
+      sqerr <- lapply(y, function(z) {
+        
+        err <- try(((backtrans(z$pars.est) - backtrans(z$pars.true))/
+                      ifelse(backtrans(z$pars.true) == 0, 2*pi, backtrans(z$pars.true)))^2)
+        
+        if(is.numeric(err)) {
+          
+          out <- err
+          
+        } else {
+          
+          out <- rep(NA, length(z$pars.true))
+          
+        }
+        
+        names(out) <- names(z$pars.true)
+        
+        return(out)
+      })
+      
+      rows <- length(sqerr)
+
+      nms <- names(sqerr[[1]])
+
+      pars <- matrix(unlist(sqerr), nrow = rows, byrow = T)
+      
+      msqerr <- apply(pars, 2, median, na.rm = T)
+      
+      names(msqerr) <- nms
+      
+      rmsqerr <- sqrt(msqerr)
+      
+      return(rmsqerr)
+    })
+  })
+}
+
+
+# Display RMdSPD in data frame
+
+rmsd.data <- lapply(rmsd, function(x) lapply(x, as.data.frame))
+rmsd.data <- lapply(rmsd.data, function(x) lapply(x, function(y) {as.data.frame(t(as.matrix(y)))}))
+rmsd.data <- lapply(rmsd.data, function(x) lapply(1:length(x), function(y, data) {
+  names(data[[y]]) <- names(rmsd[[1]][[y]][[1]])
+  return(data[[y]])}, data = x))
+
+
+# Create plots for part 1
+
+plots.rmsd.1 <- lapply(rmsd.data[[1]], function(x) {
+  
+  names.pars.varied <- list(bquote(a["i=j"]), bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                            bquote(beta["acc"]), bquote(kappa))
+  
+  if(ncol(x) == 18) {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]))
+    
+  } else if(ncol(x) == 30) {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]))
+    
+  } else {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]), bquote(a["i4"]))
+    
+  }
+  
+  names.pars.est <- append(trnames, list(bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                         bquote(beta["acc"]), bquote(mu), bquote(kappa)))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(par.varied = c(0, 1, 2, 3, 4, rep(c(1, 2, 3, 4, 5), (nrow(x) %/% 5)-1)),
+           state.varied = c(1, rep(1, 4), rep(2:((nrow(x) %/% 5)), each = 5))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "RMdSPD", names_repair = "unique") %>%
+    mutate(state.est = rep(c(rep(1:max(state.varied), max(state.varied)+1),
+                         rep(1:max(state.varied), each = 6)), nrow(x)),
+           par.est = rep(c(rep(1, max(state.varied)), 
+                           rep(2:(max(state.varied)+1), each = max(state.varied)), 
+                           rep((max(state.varied)+2):(max(state.varied)+7), max(state.varied))), nrow(x))) %>%
+    mutate_at(vars(par.varied, state.varied, par.est, state.est), as.factor)
+
+  p <- ggplot(data = data.long, aes(x = par.varied, y = par.est, fill = RMdSPD)) +
+    geom_tile() + facet_grid(cols = vars(state.varied), rows = vars(state.est)) +
+    scale_x_discrete(name = "Varied parameter", labels = names.pars.varied) +
+    scale_y_discrete(name = "Estimated parameter", labels = names.pars.est) +
+    scale_fill_distiller(breaks = c(0, 0.1, 0.5, 1), palette = "Spectral")
+  
+  return(p)
+})
+
+
+# Create plots for parts 2,3, and 4
+
+plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
+  
+  if(ncol(x) == 18) {
+    
+    k <- 2
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]))
+    
+  } else if(ncol(x) == 30) {
+    
+    k <- 3
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]))
+    
+  } else {
+    
+    k <-4
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]), bquote(a["i4"]))
+    
+  }
+  
+  names.pars.est <- append(trnames, list(bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                                         bquote(beta["acc"]), bquote(mu), bquote(kappa)))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = 1:3) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "RMdSPD", names_repair = "unique") %>%
+    mutate(state.est = rep(c(rep(1:k, k+1),
+                             rep(1:k, each = 6)), nrow(x)),
+           par.est = rep(c(rep(1, k), 
+                           rep(2:(k+1), each = k), 
+                           rep((k+2):(k+7), k)), nrow(x))) %>%
+    mutate_at(vars(cond, par.est, state.est), as.factor)
+  
+  p <- ggplot(data = data.long, aes(x = par.est, y = RMdSPD, color = cond)) +
+    geom_point(position = position_dodge(0.25)) + facet_grid(cols = vars(state.est)) +
+    scale_x_discrete(name = "Estimated parameter", labels = names.pars.est) +
+    scale_y_continuous(breaks = c(0.1, 0.5, 1, 1.5, 2)) +
+    geom_hline(yintercept = 0.1, linetype = "dashed") +
+    geom_hline(yintercept = 0.5, linetype = "dashed")
+  
+  if(y == 2) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+  } else if (y == 3) {
+    names.cond <- c("1", "2", "3")
+    label.cond <- bquote(tau["start"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "m"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}), data = rmsd.data)
+
+```
+
+```{r calculate linear regressions, include=FALSE}
+
+# Calculate regression weights for transition probabilities
+
+regw.tr <- list()
+
+regw.tr <- lapply(get("estimates.1"), function(x) {
+  
+  varpar <- lapply(x[1], function(y) {
+    
+    lapply(y, function(z) {
+      
+      nms <- names(z$pars.true)
+      
+      pars.tr <- logical(length(z$pars.true))
+      
+      pars.tr[str_detect(nms, "(Intercept)")] <- T
+      
+      intpar <- try(cbind(backtrans(z$pars.true[pars.tr]), backtrans(z$pars.est[pars.tr])))
+      
+      if(is.numeric(intpar)) {
+        out <- intpar
+      } else {
+        out <- matrix(NA, nrow = length(z$pars.true[pars.tr]), ncol = 2)
+      }
+      
+      out <- apply(out, 1, list)
+      
+      return(out)
+    })
+  })
+  
+  df <- list()
+  
+  for (i in 1:length(varpar[[1]][[1]])) {
+    
+    df[[i]] <- lapply(varpar, function(y, index) {
+      
+      lapply(y, function(z) {z[[index]]})
+      
+    }, index = i)
+  }
+  
+  df <- lapply(df, as.data.frame)
+
+  df <- lapply(df, function(z) {
+    
+    out <- as.data.frame(t(as.matrix(z)))
+    
+    names(out) <- c("true", "est")
+    
+    return(out)
+  })
+})
+
+
+# Calculate linear regression weights for response parameters
+
+regw.resp <- list()
+  
+regw.resp <- lapply(get("estimates.1"), function(x) {
+  
+  index <- 1:length(x[-1])
+  
+  varpar <- lapply(index, function(i, y) {
+    
+    lapply(y[[i]], function(z) {
+      
+      nms <- names(z$pars.true)
+      
+      #pars.tr <- logical(length(z$pars.true))
+      pars.resp <- logical(length(z$pars.true))
+      
+      #pars.tr[str_detect(nms, "(Intercept)")] <- T
+      pars.resp[nms %in% c("shape", "scale", "kappa")] <- T
+      
+      intpar <- try(c(backtrans(z$pars.true[pars.resp][i]), backtrans(z$pars.est[pars.resp][i])))
+      
+      if(is.numeric(intpar)) {
+        return(intpar)
+      } else {
+        return(rep(NA, 2))
+      }
+    })
+  }, y = x[-1])
+  
+  df <- lapply(varpar, as.data.frame)
+  df <- lapply(df, function(z) {
+
+    out <- as.data.frame(t(as.matrix(z)))
+
+    names(out) <- c("true", "est")
+
+    return(out)
+  })
+})
+
+
+# Plot linear regressions for transition probabilities
+
+D <- 100
+
+regw.tr.data <- lapply(regw.tr, function(x) lapply(x, function(y) rbind(y)))
+regw.tr.data <- lapply(regw.tr.data, function(x) reduce(x, rbind))
+
+plots.lm.tr <- lapply(1:length(regw.tr.data), function(x, y) {
+  
+  data <- y[[x]] %>% 
+    mutate(par = rep(1:(x+1)^2, each = D),
+           from = rep(rep(1:(x+1), each = D), x+1),
+           to = rep(1:(x+1), each = D*(x+1)))
+  
+  p <- ggplot(data, aes(x = true, y = est)) + 
+    facet_grid(rows = vars(from), cols = vars(to), labeller = label_both) +
+    geom_point() + geom_smooth(method = "lm") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    scale_x_continuous(name = "True transition probability") +
+    scale_y_continuous(name = "Estimated transition probability")
+  
+  return(p)
+}, y = regw.tr.data)
+
+
+# Plot linear regressions for response parameters
+
+regw.resp.data <- lapply(regw.resp, function(x) lapply(x, function(y) rbind(y)))
+regw.resp.data <- lapply(regw.resp.data, function(x) reduce(x, rbind))
+
+parnames <- list(bquote(alpha["vel;1"]), bquote(beta["vel;1"]), bquote(alpha["acc;1"]), bquote(beta["acc;1"]),
+                 bquote(alpha["vel;2"]), bquote(beta["vel;2"]), bquote(alpha["acc;2"]), bquote(beta["acc;2"]), bquote(kappa["2"]),
+                 bquote(alpha["vel;3"]), bquote(beta["vel;3"]), bquote(alpha["acc;3"]), bquote(beta["acc;3"]), bquote(kappa["3"]),
+                 bquote(alpha["vel;4"]), bquote(beta["vel;4"]), bquote(alpha["acc;4"]), bquote(beta["acc;4"]), bquote(kappa["4"]))
+
+plots.lm.resp <- lapply(regw.resp.data, function(x) {
+  
+  npar <- nrow(x) %/% D
+  
+  data <- x %>% 
+    mutate(par = rep(1:npar, each = D),
+           type = rep(1, 2, 1, 2))
+  
+  p <- ggplot(data, aes(x = true, y = est)) + 
+    facet_wrap(vars(par), scales = "free", labeller = label_bquote(.(parnames[[par]]))) +
+    geom_point() + geom_smooth(method = "lm") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    scale_x_continuous(name = "True transition probability") +
+    scale_y_continuous(name = "Estimated transition probability")
+  
+  return(p)
+})
+
+```
+
+```{r calculate accuracy, include=FALSE}
+
+# Summarise accuracy
+
+acc.data <- list()
+
+for (part in 1:4) {
+  
+  acc.data[[part]] <- lapply(get(paste("estimates.", part, sep = "")), function(x) {
+    out <- lapply(x, function(y) { 
+      out <- lapply(y, function(z) {
+        
+        if(is.numeric(z$accuracy)) {
+          acc <- z$accuracy
+        } else {
+          acc <- NA
+        }
+        
+        return(acc)
+      })
+      
+      return(as.vector(reduce(out, cbind)))
+    })
+    
+    return(as.data.frame(t(reduce(out, cbind))))
+  })
+}
+
+# Plot accuracy part 1
+
+plots.acc.1 <- lapply(acc.data[[1]], function(x) {
+  
+  names.pars.varied <- list(bquote(a["i=j"]), bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                            bquote(beta["acc"]), bquote(kappa))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(par.varied = c(0, 1, 2, 3, 4, rep(c(1, 2, 3, 4, 5), (nrow(x) %/% 5)-1)),
+           state.varied = c(1, rep(1, 4), rep(2:((nrow(x) %/% 5)), each = 5))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    mutate_at(vars(par.varied, state.varied), as.factor)
+  
+  p <- ggplot(data = data.long, aes(x = par.varied, y = accuracy)) +
+    geom_boxplot(outlier.shape = 4) + facet_grid(cols = vars(state.varied)) +
+    scale_x_discrete(name = "Varied parameter", labels = names.pars.varied) + 
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-0.33, 0, 0.25, 0.5, 0.75, 1))
+  
+  return(p)
+})
+
+
+# Plot accuracy parts 2, 3, and 4
+
+acc.data.234 <- lapply(acc.data[2:4], function(x) reduce(x, rbind))
+
+plots.acc.234 <- lapply(1:3, function(y, data) {
+  
+  x <- as_tibble(data[[y]], .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy")
+  
+  p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
+    geom_boxplot(outlier.shape = 4) + 
+    scale_x_discrete(name = "k (number of states)")
+  
+  if(y == 1) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+  } else if (y == 2) {
+    names.cond <- c("1", "2", "3")
+    label.cond <- bquote(tau["start"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "m"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}, data = acc.data.234)
+
+
+# Plot accuracy over interval parts 2 and 4
+
+plots.acc.int.24 <- lapply(c(1, 3), function(y, data) {
+  
+  x <- as_tibble(data[[y]], .name_repair = "unique")
+  
+  if(y == 1) {
+  
+    int <- rep(seq(1, 5, length.out = D), 9) 
+  
+  } else {
+    
+    int <- rep(floor(seq(1, 200, length.out = D)), 9)
+    
+  }
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    mutate(int = int)
+  
+  p <- ggplot(data = data.long, aes(x = int, y = accuracy, color = cond)) +
+    facet_grid(cols = vars(k), labeller = label_both) + 
+    geom_point()
+  
+  if(y == 1) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+    x.name <- bquote(tau["noise"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "m"
+    x.name <- "l"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond) +
+    scale_x_continuous(name = x.name) + 
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-0.33, 0, 0.25, 0.5, 0.75, 1))
+  
+  return(p)
+}, data = acc.data.234)
+
+```
 
 # Results
 ## Simulation study
@@ -200,30 +814,154 @@ With a few exceptions, the simulation study revealed that the HMM recovered para
 
 ### Parameter variation
 
-In the first part of the simulation, I examined how varying the parameters in the HMM affects the deviation between the true and estimated parameters and the accuracy between the true and estimated state sequence. Figure X displays the RMdSPD between true and estimated parameters depending on which parameter has been manipulated in the HMM with two states. The RMdSPD was below 0.1 for all estimated and manipulated parameters (except the irrelevant initial state probabilities). Thus, no matter which relevant parameter changed in the HMM, the median deviation did not exceed 10% of the true parameter value. The regressions between manipulated true and estimated parameters for two states are shown in Figures X and X. With one outlier at parameter $\alpha_{acc;1}$, the estimated parameters matched the true parameters very closely: Changing the true parameters led to linear changes in the estimated parameters. However, the deviation between true and estimated response parameters seemed to increase slighlty with parameter magnitude. Considering accuracy, Figure X displays Cohen's kappa between true and estimated hidden state sequences for two states. With two exceptions, kappa values were almost one, indicating nearly perfect agreement. In sum, the HMM with two states recovered parameters and hidden states very well with outliers only occuring rarely.  
+In the first part of the simulation, I examined how varying the parameters in the HMM affects the deviation between the true and estimated parameters and the accuracy between the true and estimated state sequence. Figure \@ref(fig:plot-rmdspd-1-2) displays the RMdSPD between true and estimated parameters depending on which parameter has been manipulated in the HMM with two states. The RMdSPD was below 0.1 for all estimated and manipulated parameters (except the irrelevant initial state probabilities). Thus, no matter which relevant parameter changed in the HMM, the median deviation did not exceed 10% of the true parameter value. The regressions between manipulated true and estimated parameters for two states are shown in Figures \@ref(fig:plot-regtr-1-2) and \@ref(fig:plot-regresp-1-2). With one outlier at parameter $\alpha_{acc;1}$, the estimated parameters matched the true parameters very closely: Changing the true parameters led to linear changes in the estimated parameters. However, the deviation between true and estimated response parameters seemed to increase slighlty with parameter magnitude. Considering accuracy, Figure \@ref(fig:plot-acc-1-2) displays Cohen's kappa between true and estimated hidden state sequences for two states. With two exceptions, kappa values were almost one, indicating nearly perfect agreement. In sum, the HMM with two states recovered parameters and hidden states very well with outliers only occuring rarely.  
 
-For three states, the RMdSPD is shown in Figure X. When response parameters (other than $a_{i=j}$) were manipulated, the RMdSPDs for $a_{12}$ and $a_{31}$ were consistently below 0.5. Varying $\kappa$ in states two and three led to RMdSPDs below 0.5 in the respective states. Otherwise, RMdSPDs were consistently lower than 0.1, indicating a median deviation between true and estimated parameters below 10% of the true parameter. Inspecting the regressions between manipulated true and estimated parameters (see Figures X and X) revealed a strong and unbiased linear relationship (intercepts close to zero and slopes close to one). Again, the deviation seemed to increase with true parameter magnitude (reverse for kappas). In contrast to the two-state HMM, larger deviatons and more outliers were observed. Cohen's kappa values for the three-state HMM are presented in Figure X. For most estimated models, the kappas between true and estimated state sequences were above 0.95, indicating almost perfect agreement. However, for some models I observed kappas clustered around zero or -0.33, suggesting that state labels switched (CITE). To summarize, the three-state HMM displayed a slightly worse parameter recover with more outliers than the two-state model but shows an almost equally good accuracy.  
+(ref:plot-rmdspd-1-2) RMdSPD between true and estimated parameters of the two-state HMM in part one of the simulation. Labels on the x-axis indicate which true parameters have been manipulated and labels on the y-axis show for which estimated parameter the RMdSPD is displayed. Top facet labels specify in which state the parameters have been varied and right facet labels denote to which state estimated parameters belong.
 
-The RMdSPDs for the four-state HMM is illustrated in Figure X. For estimated transition probabilities and $\alpha_{vel}$ and $\beta_{vel}$ parameters in states one and four, RMdSPDs were below 0.5. Estimated kappa parameters in smooth pursuits were also often below 0.5 when paramteres in states two, three, and four were varied. Otherwise, RMdSPDs were below 0.1, indicating a median deviation below 10% of the true parameter. Looking at the regressions between true and estimated paramters, Figure X shows strong and unbiased relationships but larger deviations and more outliers than in the previous models, especially for states one and four. Accuracy indicated by Cohen's kappa ranged between 0.6 and 0.9 for the majority of models, meaning moderate to almost perfect agreement between true and estimated state sequences. Here, some kappa values clustered around 0.25 and zero, which again can be interpreted as the results of label switching. Summarizing, the parameter recovery for the four-state HMM was slightly worse with even more outliers compared to the two- and three-state models. Especially the recovery of transition parameters in states corresponding to fixations and smooth pursuits decreased.  
+```{r plot-rmdspd-1-2, fig.cap="(ref:plot-rmdspd-1-2)"}
 
+print(plots.rmsd.1[[1]])
+
+```
+
+(ref:plot-regtr-1-2) Regression lines between true and estimated transition probabilities for the two-state HMM in part one. Top facet labels show to and right facet labels show from which state the HMM is moving. 
+
+```{r plot-regtr-1-2, fig.cap="(ref:plot-regtr-1-2)"}
+
+print(plots.lm.tr[[1]])
+
+```
+
+(ref:plot-regresp-1-2) Regression lines between true and estimated transition response parameters of the two-state HMM in part one. Top facet labels indicate response parameters.
+
+```{r plot-regresp-1-2, fig.cap="(ref:plot-regresp-1-2)"}
+
+print(plots.lm.resp[[1]])
+
+```
+
+(ref:plot-acc-1-2) Boxplots displaying Cohen's kappa depending on which parameter of the two-state HMM has been manipulated in part one. Top facet labels indicate for which state parameters have been manipulated. Black solid lines symbolize medians. Crosses represent outliers (distance to first/third quartile higher than 1.5 times the inter-quartile range [IQR]).
+
+```{r, plot-acc-1-2, fig.cap="(ref:plot-acc-1-2)"}
+
+print(plots.acc.1[[1]])
+
+```
+
+For three states, the RMdSPD is shown in Figure \@ref(fig:plot-rmdspd-1-3). When response parameters (other than $a_{i=j}$) were manipulated, the RMdSPDs for $a_{12}$ and $a_{31}$ were consistently below 0.5. Varying $\kappa$ in states two and three led to RMdSPDs below 0.5 in the respective states. Otherwise, RMdSPDs were consistently lower than 0.1, indicating a median deviation between true and estimated parameters below 10% of the true parameter. Inspecting the regressions between manipulated true and estimated parameters (see Figures \@ref(fig:plot-regtr-1-3) and \@ref(fig:plot-regresp-1-3)) revealed a strong and unbiased linear relationship (intercepts close to zero and slopes close to one). Again, the deviation seemed to increase with true parameter magnitude (reverse for kappas). In contrast to the two-state HMM, larger deviatons and more outliers were observed. Cohen's kappa values for the three-state HMM are presented in Figure \@ref(fig:plot-acc-1-3). For most estimated models, the kappas between true and estimated state sequences were above 0.95, indicating almost perfect agreement. However, for some models I observed kappas clustered around zero or -0.33, suggesting that state labels switched (CITE). To summarize, the three-state HMM displayed a slightly worse parameter recover with more outliers than the two-state model but shows an almost equally good accuracy.  
+
+(ref:plot-rmdspd-1-3) RMdSPD between true and estimated parameters of the three-state HMM in part one of the simulation. Labels on the x-axis indicate which true parameters have been manipulated and labels on the y-axis show for which estimated parameter the RMdSPD is displayed. Top facet labels specify in which state the parameters have been varied and right facet labels denote to which state estimated parameters belong.
+
+```{r plot-rmdspd-1-3, fig.cap="(ref:plot-rmdspd-1-3)"}
+
+print(plots.rmsd.1[[2]])
+
+```
+
+(ref:plot-regtr-1-3) Regression lines between true and estimated transition probabilities for the three-state HMM in part one. Top facet labels show to and right facet labels show from which state the HMM is moving. 
+
+```{r plot-regtr-1-3, fig.cap="(ref:plot-regtr-1-3)"}
+
+print(plots.lm.tr[[2]])
+
+```
+
+(ref:plot-regresp-1-3) Regression lines between true and estimated transition response parameters of the three-state HMM in part one. Top facet labels indicate response parameters.
+
+```{r plot-regresp-1-3, fig.cap="(ref:plot-regresp-1-3)"}
+
+print(plots.lm.resp[[2]])
+
+```
+
+(ref:plot-acc-1-3) Boxplots displaying Cohen's kappa depending on which parameter of the three-state HMM has been manipulated in part one. Top facet labels indicate for which state parameters have been manipulated. Black solid lines symbolize medians and hinges the first and third quartile. Whiskers range from hinges to lowest/highest value within 1.5 times the IQR. Crosses represent outliers.
+
+```{r, plot-acc-1-3, fig.cap="(ref:plot-acc-1-3)"}
+
+print(plots.acc.1[[2]])
+
+```
+
+The RMdSPDs for the four-state HMM is illustrated in Figure \@ref(fig:plot-rmdspd-1-4). For estimated transition probabilities and $\alpha_{vel}$ and $\beta_{vel}$ parameters in states one and four, RMdSPDs were below 0.5. Estimated kappa parameters in smooth pursuits were also often below 0.5 when paramteres in states two, three, and four were varied. Otherwise, RMdSPDs were below 0.1, indicating a median deviation below 10% of the true parameter. Looking at the regressions between true and estimated paramters, Figures \@ref(fig:plot-regtr-1-4) and \@ref(fig:plot-regresp-1-4) show strong and unbiased relationships but larger deviations and more outliers than in the previous models, especially for states one and four. Accuracy indicated by Cohen's kappa ranged between 0.6 and 0.9 for the majority of models, meaning moderate to almost perfect agreement between true and estimated state sequences (see Figure \@ref(fig:plot-acc-1-4)). Here, some kappa values clustered around 0.25 and zero, which again can be interpreted as the results of label switching. Summarizing, the parameter recovery for the four-state HMM was slightly worse with even more outliers compared to the two- and three-state models. Especially the recovery of transition parameters in states corresponding to fixations and smooth pursuits decreased.  
 Overall, simulations in part one demonstrated that the HMM recovered parameters at least moderately well when parameters were manipulated (all RMdSPDs below 0.5). The HMM estimated state sequences very accurately. Adding states to the model decreased the accuracy and recovery slightly, leading to more outliers, especially when smooth pursuits were added.
 
+(ref:plot-rmdspd-1-4) RMdSPD between true and estimated parameters of the four-state HMM in part one of the simulation. Labels on the x-axis indicate which true parameters have been manipulated and labels on the y-axis show for which estimated parameter the RMdSPD is displayed. Top facet labels specify in which state the parameters have been varied and right facet labels denote to which state estimated parameters belong.
+
+```{r plot-rmdspd-1-4, fig.cap="(ref:plot-rmdspd-1-4)"}
+
+print(plots.rmsd.1[[3]] + theme(axis.text = element_text(size = 6)))
+
+```
+
+(ref:plot-regtr-1-4) Regression lines between true and estimated transition probabilities for the four-state HMM in part one. Top facet labels show to and right facet labels show from which state the HMM is moving. 
+
+```{r plot-regtr-1-4, fig.cap="(ref:plot-regtr-1-4)", fig.height=8}
+
+print(plots.lm.tr[[3]] + theme(axis.text = element_text(size = 8)))
+
+```
+
+(ref:plot-regresp-1-4) Regression lines between true and estimated transition response parameters of the four-state HMM in part one. Top facet labels indicate response parameters.
+
+```{r plot-regresp-1-4, fig.cap="(ref:plot-regresp-1-4)", fig.height=8}
+
+print(plots.lm.resp[[3]] + theme(axis.text = element_text(size = 6)))
+
+```
+
+(ref:plot-acc-1-4) Boxplots displaying Cohen's kappa depending on which parameter of the four-state HMM has been manipulated in part one. Top facet labels indicate for which state parameters have been manipulated. Black solid lines symbolize medians and hinges the first and third quartile. Whiskers range from hinges to lowest/highest value within 1.5 times the IQR. Crosses represent outliers.
+
+```{r, plot-acc-1-4, fig.cap="(ref:plot-acc-1-4)"}
+
+print(plots.acc.1[[3]] + theme(axis.text = element_text(size = 8)))
+
+```
 
 ### Sample size and noise variation
 
-In the second part, I varied the sample size of the HMM and added noise to the generated data. For the two-state HMM, the RMdSPDs were above 0.5 for $\beta_{vel}$ and $\beta_{acc}$ in both states (see Figure X). The other estimated parameters showed RMdSPDs close to or below 0.1. Increasing the sample size seemed to improve RMdSPDs for most parameters slightly. For $\beta_{vel}$ and $\beta_{acc}$ in both states, models with 2500 samples had the lowest RMdSPDs. Accuracy measured by Cohen's kappa was almost perfect with kappa values very close to one (see Figure X, left plot). To conclude, adding noise did not affect the parameter recover or accuracy of the two-state HMM, whereas increasing the sample size improved the recovery slightly.
+In the second part, I varied the sample size of the HMM and added noise to the generated data. For the two-state HMM, the RMdSPDs were above 0.5 for $\beta_{vel}$ and $\beta_{acc}$ in both states (see Figure \@ref(fig:plot-rmdspd-2-2)). The other estimated parameters showed RMdSPDs close to or below 0.1. Increasing the sample size seemed to improve RMdSPDs for most parameters slightly. For $\beta_{vel}$ and $\beta_{acc}$ in both states, models with 2500 samples had the lowest RMdSPDs. Accuracy measured by Cohen's kappa was almost perfect with kappa values very close to one (see Figure \@ref(fig:plot-acc-2), left plot). To conclude, adding noise did not affect the parameter recover or accuracy of the two-state HMM, whereas increasing the sample size improved the recovery slightly.  
 
-The RMdSPDs for the three-state HMM and $\beta_{vel}$ and $\beta_{acc}$ were above 0.5 in all three states. Again, the other estimated parameters were below or close to 0.1, only $a_{12}$ and $a_{31}$ with 500 samples were closer to 0.5. For most parameters in all three states, higher sample sizes had lower RMdSPDs. The accuracy of the estimated models was almost perfect with most kappa values above 0.95 (see Figure X, middle plot). Several outliers clustered around kappas of zero and -0.33, signaling label switching. For the three-state HMM, adding noise led to a slightly worse recovery and accuracy overall. However, scale parameters of gamma distributions in all three states were only badly recovered. 
+(ref:plot-rmdspd-2-2) RMdSPD between true and estimated parameters of the two-state HMM in part two of the simulation. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong.
 
-RMdSPDs regarding the four-state HMM are displayed in Figure X. For states one and four, values for most parameters (including all transition probabilites) were above 0.5. Similarly, RMdSPDs for $\beta_{vel}$ and $\beta_{acc}$ in states two and three were above 0.5. For states two and three, higher samples sizes showed slightly lower RMdSPDs. As in the previous part, most Cohen's kappa values ranged between 0.6 and 0.9, meaning substantial to almost perfect agreement between true and estimated states (Figure X, right plot). Multiple kappa values clustered around 0.25 or zero, which can be explained by label switching. In summary, adding noise to data generated by the four-state HMM heavily decreased the recovery for most parameters in states corresponding to fixations and smooth pursuits. For saccade and PSO states, only scale parameters of gamma distributions were badly recovered, but increasing the sample size slightly improved the recovery.
+```{r plot-rmdspd-2-2, fig.cap="(ref:plot-rmdspd-2-2)"}
 
+print(plots.rmsd.234[[1]][[1]])
+
+```
+
+(ref:plot-acc-2) Cohen's kappa depending on the variation of noise added to the data generated by the HMM. Colours indicate different sizes of generated data. Top facet labels indicate the number of states in the HMM.
+
+```{r, plot-acc-2, fig.cap="(ref:plot-acc-2)"}
+
+print(plots.acc.int.24[[1]])
+
+```
+
+The RMdSPDs for the three-state HMM and $\beta_{vel}$ and $\beta_{acc}$ were above 0.5 in all three states (see Figure \@ref(fig:plot-rmdspd-2-3)). Again, the other estimated parameters were below or close to 0.1, only $a_{12}$ and $a_{31}$ with 500 samples were closer to 0.5. For most parameters in all three states, higher sample sizes had lower RMdSPDs. The accuracy of the estimated models was almost perfect with most kappa values above 0.95 (see Figure \@ref(fig:plot-acc-2), middle plot). Several outliers clustered around kappas of zero and -0.33, signaling label switching. For the three-state HMM, adding noise led to a slightly worse recovery and accuracy overall. However, scale parameters of gamma distributions in all three states were only badly recovered.  
+
+(ref:plot-rmdspd-2-3) RMdSPD between true and estimated parameters of the three-state HMM in part two of the simulation. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong.
+
+```{r plot-rmdspd-2-3, fig.cap="(ref:plot-rmdspd-2-3)"}
+
+print(plots.rmsd.234[[1]][[2]])
+
+```
+
+RMdSPDs regarding the four-state HMM are displayed in Figure \@ref(fig:plot-rmdspd-2-4). For states one and four, values for most parameters (including all transition probabilites) were above 0.5. Similarly, RMdSPDs for $\beta_{vel}$ and $\beta_{acc}$ in states two and three were above 0.5. For states two and three, higher samples sizes showed slightly lower RMdSPDs. As in the previous part, most Cohen's kappa values ranged between 0.6 and 0.9, meaning substantial to almost perfect agreement between true and estimated states (Figure \@ref(fig:plot-acc-2), right plot). Multiple kappa values clustered around 0.25 or zero, which can be explained by label switching. In summary, adding noise to data generated by the four-state HMM heavily decreased the recovery for most parameters in states corresponding to fixations and smooth pursuits. For saccade and PSO states, only scale parameters of gamma distributions were badly recovered, but increasing the sample size slightly improved the recovery.  
 In general, the HMM recovered parameters well despite noise being added to the data. However, when smooth pursuits were added to the model, the parameter recovery for fixation and smooth pursuit states substantially decreased. When PSOs or smooth pursuits were included, scale parameters of gamma distributions were badly recovered. Increasing the samples in the HMM slightly improved the recovery of most parameters. The accuracy of the model was slightly lowered when including more states, but it was neither affected by the range of noise $\tau_{noise}$ nor the sample size.
+
+(ref:plot-rmdspd-2-4) RMdSPD between true and estimated parameters of the three-state HMM in part two of the simulation. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong.
+
+```{r plot-rmdspd-2-4, fig.cap="(ref:plot-rmdspd-2-4)"}
+
+print(plots.rmsd.234[[1]][[3]])
+
+```
 
 
 ### Variation of starting values
 
-The third part of the simulation investigated how increasing the variation in generating starting values affected parameter recover and accuracy of the HMM. For the two-state HMM, all parameters displayed RMdSPDs lower than 0.1 (see Figure X). Cohen's kappa values were slightly lower than 1, indicating almost perfect accuracy (see Figure X). For the three-state HMM, RMdSPDs were lower than 0.1 except for $a_{12}$ and $a_{31}$, which were below 0.5. As in previous parts, Cohen's kappa values were mostly above 0.95 (almost perfect accuracy) with exceptions clustering around zero and -0.33. Regarding the four state-HMM, RMdSPS of transition probabilities for states one and four were clustered above 0.1, other estimated parameters in the model showed values below 0.1. The HMM showed substantial to almost perfect accuracy, as Cohen's kappa values were mostly above 0.8 with a few values clustering around 0.6, 0.25, and zero. In conclusion, the parameter recovery of the model worked very well. State sequences were accurately estimated and more states being included in the model slightly decreased the accuracy. Increasing the variation in starting values for parameter estimation did neither affect the parameter recovery nor accuracy.
-
+The third part of the simulation investigated how increasing the variation in generating starting values affected parameter recover and accuracy of the HMM. For the two-state HMM, all parameters displayed RMdSPDs lower than 0.1 (see Figure X). Cohen's kappa values were slightly lower than 1, indicating almost perfect accuracy (see Figure X). For the three-state HMM, RMdSPDs were lower than 0.1 except for $a_{12}$ and $a_{31}$, which were below 0.5. As in previous parts, Cohen's kappa values were mostly above 0.95 (almost perfect accuracy) with exceptions clustering around zero and -0.33. Regarding the four state-HMM, RMdSPS of transition probabilities for states one and four were clustered above 0.1, other estimated parameters in the model showed values below 0.1. The HMM showed substantial to almost perfect accuracy, as Cohen's kappa values were mostly above 0.8 with a few values clustering around 0.6, 0.25, and zero. In conclusion, the parameter recovery of the model worked very well. State sequences were accurately estimated and more states being included in the model slightly decreased the accuracy. Increasing the variation in starting values for parameter estimation did neither affect the parameter recovery nor accuracy.  
 Since the manipulation in this part was not effective, I decided to explore post-hoc whether clusters of low Cohen's kappa values were due to label switching. According to Visser and Speekenbrink (CITE), label switching occurs when exchanging the order of the states leads to equally likely models. Thus, the model is accurate but has oppositely estimated states compared to the true states. In this case, an HMM with three states that is perfectly accurate but has one label swtiched would have a Cohen's kappa of 0. To test if label switching occured, I manually switched one or two labels post-hoc (see Figure X). It can be seen that this approach resolved low accuracy clusters for three and four states.
 
 
@@ -231,6 +969,28 @@ Since the manipulation in this part was not effective, I decided to explore post
 
 In the last part, intervals of varying length in the data were set to be missing. Regarding parameter recovery, RMdSPDs were almost exactly mirroring those in the previous part for two, three, and four states. Looking at accuracies, Figure X illustrates an interaction between the length of and amount of missing data intervals. Cohen's kappa values linearly decreased with the length of missing data intervals and the decrease became linearly steeper when more intervals were included. For two and three state models, kappas started at almost one and decreased to 0.6 for five missing intervals, indicating substantial to almost perfect accuracy. For the four-state model, kappas started around 0.85 and decreased to 0.5 for five missing intervals, suggesting moderate to substantial accuracy. As in previous parts, a few kappa values clustered around zero and -0.33 for the three-state model and around 0.6, 0.25, and zero for the four-state model. In total, missing data did not affect the parameter recovery but linearly decreased the accuracy of the model up to a moderate extent.
 
+
+## Validation
+### Model comparison
+
+To test whether HMMs are accurately describing eye movements, I applied them with one, two, three, four, and five states to two benchmark data sets and compared their Schwarz weights. For the Andersson et al. (2017) data set, I expected the highest weights for the three-state models in the image condition. For the moving dots and video condition, I predicted the highest weights for the four-state models. Figure X shows the Schwarz weights for different subjects and models in the image condition. For all subjects, the five-state model displays the highest weight, suggesting that it is the most likely to have generated the data. In the moving dots condition, the five-state model has the highest weights for most subjects, but the one-, three, and four-state models exhibit the highest weights for two subjects each (see Figure X). The video condition has the same pattern as the image condition, as the five-state model consistently has the highest weights (see Figure X). In contrast to my hypothesis, applying different HMMs to the Andersson et al. data suggests that the five-state model has most likely generated the data. Except for the moving dots condition, there was little variation in the Schwarz weights, indicating large differences in the likelihoods of the models.
+
+Ehinger data set
+
+### Comparison against other algorithms
+
+The hypothesis that HMMs improve the classification performance of eye movement events was investigated by comparing gazeHMM against other algorithms. Therefore, I applied gazeHMM with four events to the Andersson et al. (2017) data set. First, I calculated the RMSD [^2] as described in the original article by Andersson et al. for all algorithms included in the study plus gazeHMM. Table X shows that in all three conditions, gazeHMM has a higher RMSD than all the the other algorithms for classified fixations due to a large amount of very short fixations. For saccades, gazeHMM has the fourth lowest RMSD of the algorithms in the image and video conditions but the second highest in the moving dots condition (see Table X). Here, gazeHMM overestimated the number and duration of saccades (either slightly or substantially). Moreover, gazeHMM underestimated the number and duration of PSOs in the image and moving dots conditions, leading to the highest and intermediate RMSD among the competitors, repsectively (see Table X). In the video condition the duration was slightly overestimated but the duration was underestimated with the highest RMSD. No other algorithm was designed to classify smooth pursuits, but gazeHMM classified a large number of short smooth pursuits, causing a substantially higher RMSD than among the human coders (see Figure X). In sum, except for saccades and PSOs, gazeHMM performed worse with regard to the duration of classified events compared to the other algorithms.  
+
+[^2]: In my proposal, I declared to compute the RMSE instead of RMSD. However, since I conducted an in sample comparison the term deviation is more conventional. Andersson et al. (2017) also referred to it as RMSD.
+
+Second, I compared gazeHMM to the other algorithms by using Cohen's kappa as a measure of agreement between algorithms and human coders (see Table X). For fixations, absolute kappa values in all three conditions indicated a slight to fair agreement between gazeHMM and human coders. Compared to the other algorithms, the agreement of gazeHMM was the lowest in the image condition but the hightest in the moving dots and video conditions. In contrast, gazeHMM showed absolute kappa values for saccades that correspond to a moderate to substantial agreement. In all three conditions, the agreement was intermediate in the moving dots condition and higher than for most other algorithms in the image and video conditions. For PSOs, absolute kappa values showed slight to fair agreement agreement to human coders. It was lower in the moving dots condition but intermediate in the image and video conditions compared to the other algorithms. The agreement for smooth puruits was moderate in the moving dots condition but slight in the image and video conditions. No other algorithm in the study was designed to detect smooth pursuits. In sum, gazeHMM classified samples as saccades more similar to human coders than most other algorithms. For the other events, the classification differed from human coding more than for most other algorithms. 
+
+Confusion rate and matrix
+
+Contrary to my second hypothesis, applying gazeHMM to a benchmark data set revealed that it did not outperform all other algorithms with regard to RMSD, sample-to-sample agreement, or disagreement ratio. It rather fared better or worse than most algorithms for different events and conditions. Especially for saccades, the agreement was relatively high and improved upon the IHMM algorithm included in the study.  
+Even though it was not confirmed by the model comparison, applying gazeHMM with three states to static data might be more appropriate and yield better validation results. Table X shows the RMSD between gazeHMM and human coders only for the image condition. For fixations, gazeHMM shows a comparably low RMSD and only two other algorithms have lower values. Oppositely, saccades had the highest RMSD among the compared algorithms. The same result was found for PSOs.  
+The agreement between gazeHMM with three states and the human coders measured by Cohen's kappa is displayed in Table X (only for the image condition). For fixations, the absolute kappa indicated substantial agreement and was high compared to the other algorithms. The absolute kappa for saccades corresponded to moderate agreement. Compared to the other algorithms, it was rather low. For PSOs, the absolute agreement was fair, but intermediate with regard to the other algorithms.  
+Summing up, using gazeHMM with three states increased the agreement to human coding with regard to fixation durations and samples classified as fixations. However, for saccades and PSOs the agreement decreased.
 
 # Technical Appendix
 
