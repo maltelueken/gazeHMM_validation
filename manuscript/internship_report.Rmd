@@ -37,6 +37,8 @@ abstract: |
 keywords          : "keywords"
 wordcount         : "X"
 
+bibliography      : "report.bib"
+
 floatsintext      : no
 figurelist        : yes
 tablelist         : yes
@@ -63,7 +65,9 @@ library(flexcircmix)
 library(CircStats)
 library(depmixS4)
 library(psych)
-source(paste(dir, "algorithm/preprocessing_helper_functions.R", sep = "/"))
+library(here)
+source(here("algorithm/preprocessing_helper_functions.R"))
+source(here("algorithm/model_helper_functions.R"))
 
 ```
 
@@ -76,7 +80,7 @@ theme_set(theme_apa())
 
 ```{r load data, include=FALSE}
 
-load(paste(dir, "validation/Andersson2017_raw.Rdata", sep = "/"))
+load(here("validation/Andersson2017_raw.Rdata"))
 
 res <- c(1024, 768)
 dim <- c(380, 300)
@@ -88,11 +92,11 @@ fr <- 500
 # Algorithm Development
 As part of answering my research questions, I developed an algorithm named gazeHMM to classify gaze data into discrete eye movement events. The following section describes the development of gazeHMM and its final version that has been used to obtain results. Technical details can be found in the Technical Appendix.
 
-## Eye movement metrics
+## Eye Movement Metrics
 Many different metrics can be used to describe gaze data and eye movement events [@Zemblys2018]. Here, the goal is to find those metrics that separate the gaze data samples belonging to different events the best. However, many metrics rely on thresholds or window ranges that have to be set by the user [e.g., the distance between the mean position in a 100 ms window before and after each sample, see @Olsson2007, and @Zemblys2018]. This can be problematic because these parameters are often set without theoretical justification and they differ substantially between metrics. Belonging to the most basic metrics, which do not require parameter settings, I used velocity, acceleration, and sample-to-sample angle [similar to relative or change in angle; @Larsson2013] in gazeHMM.  
 Theoretically, these three metrics should separate eye movement events clearly. Fixations typically inherit samples with low velocity and acceleration [@Larsson2013]. Due to tremor, the angle between samples should not follow any direction but a random walk [@Duchowski2017]. In contrast, saccade samples usually have a high velocity and acceleration and follow the same direction. PSO samples tend to have moderate velocity and high acceleration since they occur after high velocity saccades [@Larsson2013]. They are specifically distinguished by their change in direction clustered around 180° [@Pekkanen2017]. Lastly, smooth pursuit samples have a moderate velocity but low acceleration (due to the smoothness) and like saccades they follow the same direction [@Larsson2013; @Leigh2015].
 
-## Fitering and smoothing
+## Fitering and Smoothing
 As with metrics, many methods can be used to filter or smooth gaze data before, while, or after computing eye movement metrics. Their purpose is to remove noise or artifacts from the gaze data that could distort the classification [@Duchowski2017]. Filtering (smoothing) methods that are applied before computing the eye movement metrics target the recorded gaze position. While removing noise, filters might also erase differences in the metrics between samples. For instance, tremor movements during fixations could be filtered out and in consequence, the samples would follow the same direction. This could complicate separating fixations from smooth pursuits. The same problem applies to PSOs and saccades where filtering could erase oscillations (see Figure \@ref(fig:filter-angle)).  
 
 (ref:filter-angle) Example data from @Andersson2017 displayed as sample-to-sample angle (in rad) over time (in s). Line colors indicate whether the positional data has been filtered before computing the sample-to-sample angle (red) or not (blue). For this example, I used a Butterworth filter of order three and a normalized cutoff frequency of 0.3. The full line segment marks where potential oscillations are filtered out. The dashed line segment illustrates where potentially random change in angle is filtered out.
@@ -119,7 +123,7 @@ ggplot(filter.ex) +
 
 ```
 
-Instead of filtering before computing the metrics, I decided to combine both in one step. Previous algorithms have used two methods that both filter and compute derivatives of the gaze position (i.e., velocity and acceleration). @Houpt2018 compute the first and second discrete derivative (similar to a Sobel and Laplace filter, respectively) of the gaze position to be used by their algorithm. Similarly, @Holmqvist2010 use a Savitzky-Golay (SG) filter @Savitzky1964 to estimate velocity and acceleration from a gaze signal. Figure \@ref(fig:filter-comparison) displays velocity and acceleration signals obtained by both methods. They follow a similar trend, but the SG velocity signal is less noisy and the acceleration signal is consequently lower than the Laplace acceleration signal. Therefore, I chose to implement the SG filter to compute velocity and acceleration signals, because it filters out more noise than the discrete derivatives but still preserves the edges in the signal to distinguish between events. To preserve motor noise in the sample-to-sample angle signal, gazeHMM computes the absolute angle with the backward difference and the first discrete derivative as the forward difference (see Technical Appendix).
+Instead of filtering before computing the metrics, I decided to combine both in one step. Previous algorithms have used two methods that both filter and compute derivatives of the gaze position (i.e., velocity and acceleration). @Houpt2018 compute the first and second discrete derivative (similar to a Sobel and Laplace filter, respectively) of the gaze position to be used by their algorithm. Similarly, @Nystrom2010 use a Savitzky-Golay (SG) filter @Savitzky1964 to estimate velocity and acceleration from a gaze signal. Figure \@ref(fig:filter-comparison) displays velocity and acceleration signals obtained by both methods. They follow a similar trend, but the SG velocity signal is less noisy and the acceleration signal is consequently lower than the Laplace acceleration signal. Therefore, I chose to implement the SG filter to compute velocity and acceleration signals, because it filters out more noise than the discrete derivatives but still preserves the edges in the signal to distinguish between events. To preserve motor noise in the sample-to-sample angle signal, gazeHMM computes the absolute angle with the backward difference and the first discrete derivative as the forward difference (see Technical Appendix).
 
 (ref:filter-comparison) Example data from @Andersson2017 displayed as velocity (deg/s) and acceleration (in deg/s$^2$) over time (in s). Line colors indicate which filter has been used to derive the signal. Savitzky-Golay filters were applied with order three and length five (corresponding to 10 ms).
 
@@ -158,25 +162,25 @@ ggplot(filter.comp, aes(x = t, y = value, color = filter)) +
 ```
 
 
-## The generative model
+## The Generative Model
 The generative model underlying gazeHMM is a multivariate hidden Markov model (HMM). It can contain between two and four states that correspond to different eye movement events: The first state always represents fixations, the second saccades, the third PSOs, and the fourth smooth pursuits. Thus, users can choose wether they would like to classify only fixations and saccades, or additionally PSOs and/or smooth puruits.  
 In general, HMMs consist of three submodels: An initial state model, a transition model, and a response model [@Visser2019]. In gazeHMM, the response model consists of three response variables which are the velocity and acceleration signals obtained by the SG filter and the change in angle signal. The response variables are treated as conditionally independent on the states. I acknowledge that conditional independence might not accurately resemble the relationship between velocity and acceleration (which are naturally correlated). This step was merely taken to keep the HMM simple and identifyable.  
 Previous algorithms using HMMs have used Gaussian distributions to describe velocity and acceleration signals (sometimes after log-transforming them). However, several reasons speak against choosing the Gaussian: First, both signals are usually positive (depending on the computation) and due to noise above zero. Second, the distributions of both signals appear to be positively skewed conditionally on the states and third, to have variances increasing with their mean. Thus, instead of using the Gaussian, it could be more appropriate to describe velocity and acceleration with a distribution that follows these three properties. In gazeHMM, I use gamma distributions with a shape and scale parametrization for this purpose. It has to be noted that the gamma was choosen out of convenience and the best fitting distribution might be different between eye-trackers, subjects, and tasks.   
 To model the sample-to-sample angle, I pursued a novel approach in gazeHMM: Using a mixture of von-Mises distributions (with a mean and concentration parameter) and a uniform distribution. Both the distributions and the metric operate on the full unit circle (i.e., between 0 and $2\pi$) which should lead to rather symmetric distributions. Moreover, the uniform distribution can distinguish fixations from the other events.  
 The initial state model and the transition model use multinomial distributions (with a category for each state). For all three submodels of the HMM, only parameter intercepts were estimated.
 
-## Missing data and blinks
+## Missing Data and Blinks
 HMMs can estimate parameters and hidden states despite missing data. They either treat data as missing at random or as missing depending on states [@Visser2019]. In gazeHMM, I assume data to be missing at random. Most of the missing data in eye movement classification are due to blinks. The user can indicate in gazHMM which samples should be labeled as blinks (other missing samples are treated as noise). Often, eye-trackers record a few samples with unreasonably high velocity and acceleration before losing the pupil signal when a blink occurs. Since these samples could distort the classification of saccades in the HMM, I decided to remove them heuristically. Before classifying the samples, gazeHMM sets all samples within 50 ms before and after blink samples as missing. The window of 50 ms was rather motivated empirically than theoretically and can bet set to any value the user considers appropriate.  
 When evaluating the likelihood of the HMM given parameters and the joint density of response distributions for missing data, the model integrates over all possible values. The resulting density for missing samples is therefore set to one [@Visser2019].
 
-## Optimization and classification
+## Optimization and Classification
 The paramters of the HMM are estimated through maximum likelihood using an expectation-maximization (EM) algorithm [@Dempster1977; @McLachlan1997]. The EM is generally suitable to estimate likelihoods with missing variables. For HMMs, it imputes missing with expected values and iteratively maximizes the joint likelihood of parameters conditional on the observed data (velocity, acceleration, and sample-to-sample angle) and the expected hidden states [eye movement events; @Visser2019]. The sequence of hidden states is estimated through the Viterbi algorithm [@Viterbi1967; @ForneyJr1973] by maximizing the posterior state probability. Parameters of the response distributions (except for the uniform distribution) were optimized on the log-scale (except for the mean parameter of the von-Mises distribution) using a spectral projected gradient method [@Birgin2000] and Barzilai-Borwein steplengths [@Barzilai1988].
 
 ## Postprocessing
 After classifying gaze samples into states, gazeHMM applies a postprocessing routine to the estimated state sequence. I implemented this rountine because constraining the transition probabilities for PSOs to turn into non-saccade events to zero often caused PSOs not to appear in the state sequence at all. Moreover, gazeHMM did not explicitly control the duration of events in the HMM which ocassionally led to unreasonably short events. Thus, the postprocessing routine heuristically compensates for such violations. This routine relabels one-sample fixations and smooth pursuits, saccades with a duration below a minimum threshold, and PSOs that follow non-saccade events. Samples were relabeled as the state of the previous event. Finally, samples initially indicated as missing were labeled as noise (including blinks) and event metrics were computed (e.g., fixation durations).
 
 ## Implementation
-The algorithm is implemented in R [version: 3.6.3; @RCoreTeam2020] and uses the packages signal (CITE) to compute velocity and acceleration signals, dplyr (CITE) to calculate sample-to-sample angles, depmixS4 [@Visser2010] for the HMM, and BB [@Varadhan2009] for Barzilai-Borwein spectral projected gradient optimization. The algorithm is available on GitHub (www.github.com/maltelueken/gazeHMM).
+The algorithm is implemented in R [version: 3.6.3; @RCoreTeam2020] and uses the packages signal [@Ligges2015] to compute velocity and acceleration signals, depmixS4 [@Visser2010] for the HMM, and BB [@Varadhan2009] for Barzilai-Borwein spectral projected gradient optimization. The algorithm is available on GitHub (www.github.com/maltelueken/gazeHMM).
 
 # Simulation Study
 To assess how well the HMM recovers parameters and state sequences, I conducted a simulation study. The design and analysis of the study were preregistered on the Open Science Framework (https://doi.org/10.17605/OSF.IO/VDJGP). The major part of this section is a direct copy of the preregistration. When appropriate, additional explanations were added and tenses adapted to make the design easier to read and understand.  
@@ -185,7 +189,7 @@ In the study, the HMM repeatedly generated data with a set of parameters (true p
 ## Design
 ### Parameter Variation
 The simulation study was divided into four parts. In the first part, I varied the parameters of the HMM. For models with $k \in \{2, 3, 4\}$ states, $q \in \{10, 15, 20\}$ parameters were varied respectively. For each parameter, the HMM generated 100 data sets with $N = 2500$ samples and the parameter varied in a specified interval in equidistant steps. This resulted in $100 \times (10+15+20) = 4500$ recoveries. Only one parameter was varied at once, the other parameters were set to their default values. All parameters of the HMM were estimated freely (i.e., there were no fixed parameters in the model). I did not manipulate the initial state probabilities because these are usually irrelevant in the context of eye movement classification. For the transition probabilities, I only simultaneously varied the probabilities for staying in the same state (diagonals of the tranistion matrix) to reduce the complexity of the simulation. The left over probability mass was split evenly between the probabilites for switching to a different state (per row of the transition matrix). Moreover, I did not modify the mean parameters of the von-Mises distributions: As location parameters, they do not alter the shape of the distribution and they are necessary features for the HMM to distinguish between different states.  
-I defined approximate ranges for each response variable and chose true parameter intervals and default values so that they produced samples that roughly corresponded to these ranges. Table \@ref(tab:sim-ranges) shows the assumed ranges for each event and Table X shows the intervals and default values for each parameter in the simulation. Parameters were scaled down by factor 10 (compared to the reported ranges) to improve fitting of the gamma distributions. I set the intervals for shape parameters of the gamma distributions for all events to [1,5] to examine how skewness influenced the recovery (shape values above five approach a symmetric distribution). The scale parameters were set so that the respective distribution approximately matched the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they were varied on the inverse scale.
+I defined approximate ranges for each response variable and chose true parameter intervals and default values so that they produced samples that roughly corresponded to these ranges. Table \@ref(tab:sim-ranges) shows the assumed ranges for each event and Tables \@ref(tab:sim-parameters-trans) and \@ref(tab:sim-parameters-resp) show the intervals and default values for each parameter in the simulation. Parameters were scaled down by factor 10 (compared to the reported ranges) to improve fitting of the gamma distributions. I set the intervals for shape parameters of the gamma distributions for all events to [1,5] to examine how skewness influenced the recovery (shape values above five approach a symmetric distribution). The scale parameters were set so that the respective distribution approximately matched the assumed ranges. Since the concentration parameters of the von-Mises distribution are the inverse of standard deviations, they were varied on the inverse scale.
 
 ### Sample Size and Noise Variation
 In the second part, I varied the sample size of the generated data and the amount of noise added to it. The model parameters were set to their default values. For models with $k \in \{2, 3, 4\}$ states and sample sizes of $N \in \{500, 2500, 10000\}$, I generated 100 data sets ($100 \times 3 \times 3 = 900$ recoveries). These samples sizes roughly corresponded to small, medium, and large eye-tracking data sets for a single participant and trial. To simulate noise, I replaced velocity and acceleration values $y$ with draws from a gamma distribution with $\alpha_{noise} = 3$ and $\beta_{noise}=(y/2)\tau_{noise}$ with $\tau_{noise} \in [1,5]$ varying between data sets. This procedure ensured that velocity and acceleration values remained positive and were drawn from moderately skewed distributions with modes equal to the original values. To angle, I added white noise from a von-Mises distribution with $\mu_{noise} = 0$ and $\kappa_{noise} \in 1/[0.1,10]$ varying between data sets. $\tau_{noise}$ and $\kappa_{noise}$ were varied simultaneously in equidistant steps in their intervals.
@@ -193,18 +197,18 @@ In the second part, I varied the sample size of the generated data and the amoun
 ### Variation of Starting Values
 In the third part, I increased the variation in the starting values used for parameter estimation. The model parameters were set to their default values. For the shape, scale, and concentration parameters, I simultaneously increased the scale parameters of the starting value gamma distributions: For $k \in \{2, 3, 4\}$ states and $\beta_{start} = (\psi_{true}/2)\tau_{start}$ with $\tau_{start} \in \{1, 2, 3\}$, 100 data sets with $N = 2500$ samples were generated each ($100 \times 3 \times 3 = 900$ recoveries).
 
-### Missing data
+### Missing Data
 In the last part, I set intervals of the generated data to be missing. The model parameters were set to their default values. For $k \in \{2, 3, 4\}$ states and $m \in \{1, 3, 5\}$ intervals, 100 data sets with $N = 2500$ samples were generated ($100 \times 3 \times 3 = 900$ recoveries). The length of the missing data interval $l \in [1,200]$ samples varied in equidistant steps between the data sets.
 
-## Starting values
+## Starting Values
 The HMM always started with a uniform distribution to estimate the initial state and state transition probabilities. To generate random starting values for the estimation of shape, scale, and concentration parameters, I used gamma distributions with a shape parameter of $\alpha_{start}=3$ and $\beta_{start}=\psi_{true}/2$ with $\psi_{true}$ being the true value of the parameter to be estimated. This setup ensured that the starting values were positive, their distributions were moderately skewed, and the modes of their distributions equaled the true parameter values. Mean parameters of the von-Mises distribution always started at their true values.
 
-## Data analysis
+## Data Analysis
 For each parameter, I calculated the root median square proportion deviation [RMdSPD; analogous to root median square percentage errors, see @Hyndman2006] between the true and estimated parameter values[^1]: $$RMdSPD = \sqrt{Med((\frac{\psi_{true}-\psi_{est}}{\psi_{true}})^2)}.$$
 I treated $RMdSPD < 0.1$ as good, $0.1 \le RMdSPD < 0.5$ as moderate, and $RMdSPD \ge 0.5$ as bad recovery of a parameter. By taking the median, I reduced the influence of potential outliers in the estimation and using proportions enabled me to compare RMdSPD values across parameters and data sets.  
-Additionally, I applied a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval in Part 1. Regression slopes closer to one indicated that the model better captured parameter change. Regression intercepts different from zero reflected a bias in parameter estimation.  
+Additionally, I applied a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval in part one. Regression slopes closer to one indicated that the model better captured parameter change. Regression intercepts different from zero reflected a bias in parameter estimation.  
 To assess state recovery, I computed Cohen's kappa (for all events taken together, not for each event separately) as a measure of agreement between true and estimated states for each generated data set. Higher kappa values were interpreted as better model accuracy. I adopted the ranges proposed by @Landis1977 to interpret kappa values.
-Models that can not be fitted were excluded from the recovery.
+Models that could not be fitted were excluded from the recovery.
 
 [^1]: This measure is only appropriate when $\psi_{true} \ne 0$. This was not the case for some mean parameters of the von-Mises distributions. In those cases, I used $\psi_{true} = 2\pi$ instead.
 
@@ -259,50 +263,13 @@ apa_table(cbind(rep(c("Interval", "Default"), 4), sim.pars.resp),
 
 ```
 
-
-Table X  
-
-*HMM parameter values used to generate data*
-
-|State|Parameter|Interval|Default|Description|
-|-----|---------|--------|-----|-----------|
-|1-4|$\rho_i^*$|-|$1/k$|Initial state probability for starting in state *i*|
-|1-4|$a_{i=j}$|[.01,.99]|0.9|Transition probability for staying in the previous state *i*|
-|1-4|$a_{i \neq j}$|$(1-a_{i=j})/(k-1)$|$0.1/(k-1)$|Transition probability for switching to from state *i* to a different state *j*|
-|1|$\alpha_{vel}$|[1,5]|3|Shape parameter of the velocity gamma distribution|
-|1|$\beta_{vel}$|[0.1,0.6]|0.35|Scale parameter of the velocity gamma distribution|
-|1|$\alpha_{acc}$|[1,5]|3|Shape parameter of the acceleration gamma distribution|
-|1|$\beta_{acc}$|[0.05,0.25]|0.15|Scale parameter of the acceleration gamma distribution|
-|1|$min^*$|-|0|Minimum of the uniform distribution|
-|1|$max^*$|-|$2\pi$|Maximum of the uniform distribution|
-|2|$\alpha_{vel}$|[1,5]|3||
-|2|$\beta_{vel}$|[5,15]|10||
-|2|$\alpha_{acc}$|[1,5]|3||
-|2|$\beta_{acc}$|[1,5]|3||
-|2|$\mu^*$|-|0|Mean parameter of the von-Mises distribution|
-|2|$\kappa$|$1/[0.1,10]$|1|Concentration parameter of the von Mises distribution
-|3|$\alpha_{vel}$|[1,5]|3||
-|3|$\beta_{vel}$|[0.5,1.5]|1||
-|3|$\alpha_{acc}$|[1,5]|3||
-|3|$\beta_{acc}$|[1,5]|3||
-|3|$\mu^*$|-|$\pi$||
-|3|$\kappa$|$1/[0.1,10]$|1||
-|4|$\alpha_{vel}$|[1,5]|3||
-|4|$\beta_{vel}$|[0.5,1.5]|1||
-|4|$\alpha_{acc}$|[1,5]|3||
-|4|$\beta_{acc}$|[0.05,0.25]|0.15||
-|4|$\mu^*$|-|0||
-|4|$\kappa$|$1/[0.1,10]$|1||
-
-*Note*. Parameters marked with $^*$ will not be varied but always set to their default values. *k* is the number of states in the model.
-
 ```{r load sim results and helper functions, include=FALSE}
 
 # Load simulation results
 
 for (part in 1:4) {
   
-  load(file = paste("~/Uni/Psychologie Master/Internship/GazeHMM/simulation/part", part, ".Rdata", sep = ""))
+  load(file = paste(here("simulation/part"), part, ".Rdata", sep = ""))
   
 }
 
@@ -736,7 +703,7 @@ plots.acc.1 <- lapply(acc.data[[1]], function(x) {
   p <- ggplot(data = data.long, aes(x = par.varied, y = accuracy)) +
     geom_boxplot(outlier.shape = 4) + facet_grid(cols = vars(state.varied)) +
     scale_x_discrete(name = "Varied parameter", labels = names.pars.varied) + 
-    scale_y_continuous(name = "Cohen's kappa", breaks = c(-0.33, 0, 0.25, 0.5, 0.75, 1))
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
   
   return(p)
 })
@@ -758,7 +725,7 @@ plots.acc.234 <- lapply(1:3, function(y, data) {
   p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
     geom_boxplot(outlier.shape = 4) + 
     scale_x_discrete(name = "k (number of states)")  + 
-    scale_y_continuous(name = "Cohen's kappa", breaks = c(-0.33, 0, 0.25, 0.5, 0.75, 1))
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
   
   if(y == 1) {
     names.cond <- c("500", "2500", "10000")
@@ -815,7 +782,7 @@ plots.acc.int.24 <- lapply(c(1, 3), function(y, data) {
   
   p <- p + scale_color_discrete(name = label.cond, labels = names.cond) +
     scale_x_continuous(name = x.name) + 
-    scale_y_continuous(name = "Cohen's kappa", breaks = c(-0.33, 0, 0.25, 0.5, 0.75, 1))
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
   
   return(p)
 }, data = acc.data.234)
@@ -907,7 +874,7 @@ plots.acc.expl <- lapply(1, function(y, data) {
   p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
     geom_boxplot(outlier.shape = 4) + 
     scale_x_discrete(name = "k (number of states)")  + 
-    scale_y_continuous(name = "Cohen's kappa", breaks = c(-0.33, 0, 0.25, 0.5, 0.75, 1))
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
   
   names.cond <- c("1", "2", "3")
   label.cond <- bquote(tau["start"])
@@ -920,13 +887,13 @@ plots.acc.expl <- lapply(1, function(y, data) {
 
 ```
 
-# Results
-## Simulation study
-### Parameter variation
+# Exploratory Results
+## Simulation Study
+### Parameter Variation
 #### Two States
-In the first part of the simulation, I examined how varying the parameters in the HMM affects the deviation and accuracy between the true and estimated parameters and state sequence. Figure \@ref(fig:plot-rmdspd-1-2) displays the RMdSPD between true and estimated parameters depending on which parameter has been manipulated in the HMM. The RMdSPD was below 0.1 for all estimated and manipulated parameters, that is, the median deviation never exceeded 10% of the true parameters [^1]. The regressions between manipulated true and estimated parameters are shown in Figures \@ref(fig:plot-regtr-1-2) and \@ref(fig:plot-regresp-1-2). With one outlier at parameter $\alpha_{acc;1}$, the estimated parameters matched the true parameters very closely. The deviation seemed to increase slighlty with parameter magnitude. Considering accuracy, Figure \@ref(fig:plot-acc-1-2) displays Cohen's kappa between true and estimated hidden state sequences. With two exceptions, kappa values were almost one, indicating nearly perfect agreement. In sum, the HMM with two states recovered parameters and hidden states very well and outliers only occured rarely.  
+In the first part of the simulation, I examined how varying the parameters in the HMM affects the deviation and accuracy between the true and estimated parameters and state sequence. Figure \@ref(fig:plot-rmdspd-1-2) displays the RMdSPD between true and estimated parameters depending on which parameter has been manipulated in the HMM. The RMdSPD was below 0.1 for all estimated and manipulated parameters, that is, the median deviation never exceeded 10% of the true parameters [^2]. The regressions between manipulated true and estimated parameters are shown in Figures \@ref(fig:plot-regtr-1-2) and \@ref(fig:plot-regresp-1-2). With one outlier at parameter $\alpha_{acc;1}$, the estimated parameters matched the true parameters very closely. The deviation seemed to increase slighlty with parameter magnitude. Considering accuracy, Figure \@ref(fig:plot-acc-1-2) displays Cohen's kappa between true and estimated hidden state sequences. With two exceptions, kappa values were almost one, indicating nearly perfect agreement. In sum, the HMM with two states recovered parameters and hidden states very well and outliers only occured rarely.  
 
-[^1]: Note that the intial state probability $\rho_i$ has also been estimated. Since the HMM only simulated one state sequence, this parameter is always either zero or one (leading to an RMdSPD of one). Therefore, I decided not to include it in the analysis.
+[^2]: Note that the intial state probability $\rho_i$ has also been estimated. Since the HMM only simulated one state sequence, this parameter is always either zero or one (leading to an RMdSPD of one). Therefore, I decided not to include it in the analysis.
 
 (ref:plot-rmdspd-1-2) RMdSPD between true and estimated parameters of the two-state HMM in part one of the simulation. Labels on the x-axis indicate which true parameters have been manipulated and labels on the y-axis show for which estimated parameter the RMdSPD is displayed. Top facet labels specify in which state the parameters have been varied and right facet labels denote to which state estimated parameters belong.
 
@@ -948,7 +915,7 @@ print(plots.lm.tr[[1]])
 
 ```{r plot-regresp-1-2, fig.cap="(ref:plot-regresp-1-2)"}
 
-print(plots.lm.resp[[1]])
+print(plots.lm.resp[[1]] + theme(axis.text = element_text(size = 10)))
 
 ```
 
@@ -967,7 +934,7 @@ For the simulation with three states, the RMdSPD is shown in Figure \@ref(fig:pl
 
 ```{r plot-rmdspd-1-3, fig.cap="(ref:plot-rmdspd-1-3)"}
 
-print(plots.rmsd.1[[2]])
+print(plots.rmsd.1[[2]]+ theme(axis.text = element_text(size = 8)))
 
 ```
 
@@ -981,9 +948,9 @@ print(plots.lm.tr[[2]])
 
 (ref:plot-regresp-1-3) Regression lines between true and estimated transition response parameters of the three-state HMM in part one. Top facet labels indicate response parameters.
 
-```{r plot-regresp-1-3, fig.cap="(ref:plot-regresp-1-3)"}
+```{r plot-regresp-1-3, fig.cap="(ref:plot-regresp-1-3)", fig.height=7}
 
-print(plots.lm.resp[[2]])
+print(plots.lm.resp[[2]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
@@ -1031,7 +998,7 @@ print(plots.acc.1[[3]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
-### Sample size and noise variation
+### Sample Size and Noise Variation
 #### Two States
 In the second part, I varied the sample size of the HMM and added noise to the generated data. For the two-state HMM, the RMdSPDs were above 0.5 for $\beta_{vel}$ and $\beta_{acc}$ in both states (see Figure \@ref(fig:plot-rmdspd-2-2)). The other estimated parameters showed RMdSPDs close to or below 0.1. Increasing the sample size seemed to improve RMdSPDs for most parameters slightly. For $\beta_{vel}$ and $\beta_{acc}$ in both states, models with 2500 samples had the lowest RMdSPDs. Accuracy measured by Cohen's kappa was almost perfect with kappa values very close to one (see Figure \@ref(fig:plot-acc-2), left plot). To conclude, adding noise did not affect the parameter recover or accuracy of the two-state HMM, whereas increasing the sample size improved the recovery slightly.  
 
@@ -1039,7 +1006,7 @@ In the second part, I varied the sample size of the HMM and added noise to the g
 
 ```{r plot-rmdspd-2-2, fig.cap="(ref:plot-rmdspd-2-2)"}
 
-print(plots.rmsd.234[[1]][[1]])
+print(plots.rmsd.234[[1]][[1]] + theme(axis.text = element_text(size = 10)))
 
 ```
 
@@ -1058,7 +1025,7 @@ The RMdSPDs for the $\beta_{vel}$ and $\beta_{acc}$ were above 0.5 in all three 
 
 ```{r plot-rmdspd-2-3, fig.cap="(ref:plot-rmdspd-2-3)"}
 
-print(plots.rmsd.234[[1]][[2]])
+print(plots.rmsd.234[[1]][[2]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
@@ -1070,19 +1037,19 @@ In general, the HMM recovered parameters well despite noise being added to the d
 
 ```{r plot-rmdspd-2-4, fig.cap="(ref:plot-rmdspd-2-4)"}
 
-print(plots.rmsd.234[[1]][[3]])
+print(plots.rmsd.234[[1]][[3]] + theme(axis.text = element_text(size = 6)))
 
 ```
 
 
-### Variation of starting values
+### Variation of Starting Values
 The third part of the simulation investigated how increasing the variation in generating starting values affected parameter recover and accuracy of the HMM. For the two-state HMM, all parameters displayed RMdSPDs lower than 0.1 (see Figure \@ref(fig:plot-rmdspd-3-2)). Cohen's kappa values were slightly lower than 1, indicating almost perfect accuracy (see Figure \@ref(fig:plot-acc-3)). For the three-state HMM, RMdSPDs were lower than 0.1 except for $a_{12}$ and $a_{31}$, which were below 0.5 (see Figure \@ref(fig:plot-rmdspd-3-3)). As in previous parts, Cohen's kappa values were mostly above 0.95 (almost perfect accuracy) with exceptions clustering around zero and -0.33 (see Figure \@ref(fig:plot-acc-3)). Regarding the four state-HMM, RMdSPS of transition probabilities for states one and four were clustered above 0.1, other estimated parameters in the model showed values below 0.1 (see Figure \@ref(fig:plot-rmdspd-3-4)). The HMM showed substantial to almost perfect accuracy, as Cohen's kappa values were mostly above 0.8 with a few values clustering around 0.6, 0.25, and zero (see Figure \@ref(fig:plot-acc-3)). In conclusion, the parameter recovery of the model worked very well. State sequences were accurately estimated and more states being included in the model slightly decreased the accuracy. Increasing the variation in starting values for parameter estimation did neither affect the parameter recovery nor accuracy.  
 
 (ref:plot-rmdspd-3-2) RMdSPD between true and estimated parameters of the two-state HMM in part three of the simulation. Colours indicate the variation in starting values used to estimate parameters. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong.
 
 ```{r plot-rmdspd-3-2, fig.cap="(ref:plot-rmdspd-3-2)"}
 
-print(plots.rmsd.234[[2]][[1]])
+print(plots.rmsd.234[[2]][[1]] + theme(axis.text = element_text(size = 10)))
 
 ```
 
@@ -1090,7 +1057,7 @@ print(plots.rmsd.234[[2]][[1]])
 
 ```{r plot-acc-3, fig.cap="(ref:plot-acc-3)"}
 
-print(plots.acc.234[[2]])
+print(plots.acc.234[[2]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
@@ -1098,7 +1065,7 @@ print(plots.acc.234[[2]])
 
 ```{r plot-rmdspd-3-3, fig.cap="(ref:plot-rmdspd-3-3)"}
 
-print(plots.rmsd.234[[2]][[2]])
+print(plots.rmsd.234[[2]][[2]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
@@ -1106,7 +1073,7 @@ print(plots.rmsd.234[[2]][[2]])
 
 ```{r plot-rmdspd-3-4, fig.cap="(ref:plot-rmdspd-3-4)"}
 
-print(plots.rmsd.234[[2]][[3]])
+print(plots.rmsd.234[[2]][[3]] + theme(axis.text = element_text(size = 6)))
 
 ```
 
@@ -1116,11 +1083,11 @@ In this part, I explored post-hoc whether clusters of low Cohen's kappa values w
 
 ```{r plot-acc-3-expl, fig.cap="(ref:plot-acc-3-expl)"}
 
-print(plots.acc.expl[[1]])
+print(plots.acc.expl[[1]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
-### Missing data
+### Missing Data
 In the last part, data intervals of varying length were set to be missing. Regarding parameter recovery, RMdSPDs were almost exactly mirroring those in the previous part for two, three, and four states (see Figures \@ref(fig:plot-rmdspd-4-2), \@ref(fig:plot-rmdspd-4-3), and \@ref(fig:plot-rmdspd-4-4), respectively). Looking at accuracies, Figure \@ref(fig:plot-acc-4) illustrates an interaction between the length of and amount of missing data intervals. Cohen's kappa values linearly decreased with the length of missing data intervals and the decrease became linearly steeper when more intervals were included. For two and three state models, kappas started at almost one and decreased to 0.6 for five missing intervals, indicating substantial to almost perfect accuracy. For the four-state model, kappas started around 0.85 and decreased to 0.5 for five missing intervals, suggesting moderate to substantial accuracy. As in previous parts, a several kappa values clustered around zero and -0.33 for the three-state model and around 0.6, 0.25, and zero for the four-state model. In total, missing data did not affect the parameter recovery but linearly decreased the accuracy of the model from an nearly perfect to a moderate extent.  
 With a few exceptions, the simulation study revealed that the HMM recovered parameters well and accurately estimated the true state sequences. The most critical decrease in recovery occured when noise was added to the data generated by models including smooth pursuit. In the noise condition, scale parameters of gamma distributions were often badly recovered. Higher sample sizes slightly improved parameter recovery, but neither variation in starting values nor missing data affected it. In contrast, the accuracy of the model was linearly descreasing with more data missing but not influenced by manipulating parameters, noise, or starting value variation. Adding more states to the HMM generally decreased the parameter recovery and the accuracy.
 
@@ -1128,7 +1095,7 @@ With a few exceptions, the simulation study revealed that the HMM recovered para
 
 ```{r plot-rmdspd-4-2, fig.cap="(ref:plot-rmdspd-4-2)"}
 
-print(plots.rmsd.234[[3]][[1]])
+print(plots.rmsd.234[[3]][[1]] + theme(axis.text = element_text(size = 10)))
 
 ```
 
@@ -1136,7 +1103,7 @@ print(plots.rmsd.234[[3]][[1]])
 
 ```{r plot-rmdspd-4-3, fig.cap="(ref:plot-rmdspd-4-3)"}
 
-print(plots.rmsd.234[[3]][[2]])
+print(plots.rmsd.234[[3]][[2]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
@@ -1144,7 +1111,7 @@ print(plots.rmsd.234[[3]][[2]])
 
 ```{r plot-rmdspd-4-4, fig.cap="(ref:plot-rmdspd-4-4)"}
 
-print(plots.rmsd.234[[3]][[3]])
+print(plots.rmsd.234[[3]][[3]] + theme(axis.text = element_text(size = 6)))
 
 ```
 
@@ -1157,15 +1124,15 @@ print(plots.acc.int.24[[2]])
 ```
 
 ## Validation
-### Starting values and model fitting
-I applied gazeHMM on two benchmark data sets to test my hypotheses. For both data sets, I used the same starting values (see Table X) to estimate the parameters of the HMM. To improve the fitting of the gamma distributions, velocity and acceleration signals were scale down by factor 100 (and so were the starting values for their gamma distributions). The algorithm was applied separately for every participant and every condition. For the data set by Andersson et al. [-@Andersson2017], the algorithm was successfully fitted for every participant and condition.
+### Starting Values and Model Fitting
+I applied gazeHMM on two benchmark data sets to test my hypotheses. For both data sets, I used the same set of starting values (initial state model: $\rho=1/k$; transition model: $a_{i=j}=0.9$ and $a_{i\neq j}=0.1/k$; response model: see Table \@ref(tab:tab-starting-values)) to estimate the parameters of the HMM. In contrast to the simulation study, generating random starting value often led to bad model fits and label switching between states. To improve the fitting of the gamma distributions, velocity and acceleration signals were scaled down by factor 100 (so were the starting values for their gamma distributions). The algorithm was applied separately for every participant and every condition. For the data set by @Andersson2017, the algorithm was successfully fitted for every participant and condition.
 
-(ref:tab-starting-values) Starting values for fitting gazeHMM to benchmark data sets
+(ref:tab-starting-values) Starting values for response models in fitting gazeHMM to benchmark data sets
 (ref:tab-starting-values-note) Starting values for velocity and acceleration signals are shown before scaling down by factor 100. Values for event 5 were chosen so that they approximately match plausible distributions for microsaccades.
 
 ```{r tab-starting-values}
 
-tab.start <- as.data.frame(matrix(c(10, 10, 10, 10, 0, 2*pi,
+tab.start <- as.data.frame(matrix(c(10, 10, 10, 10, NA, NA,
                       50, 50, 50, 50, 0, 10,
                       50, 50, 50, 50, pi, 10,
                       20, 20, 20, 20, 0, 10,
@@ -1176,18 +1143,19 @@ rownames(tab.start) <- c("Fixation", "Saccade", "PSO", "Pursuit", "Event 5")
 
 apa_table(as.data.frame(tab.start),
           col_spanners = list(Velocity = c(2, 3), Acceleration = c(4, 5), "Rel. angle" = c(6, 7)),
+          format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-starting-values)",
           note = "(ref:tab-starting-values-note)")
 
 ```
 
 
-### Model comparison
+### Model Comparison
 
 ```{r load validation results, include=FALSE}
 
-load("~/Uni/Psychologie Master/Internship/GazeHMM/validation/Andersson2017_fitted.Rdata")
-load("~/Uni/Psychologie Master/Internship/GazeHMM/validation/Andersson2017_raw.Rdata")
+load(here("validation/Andersson2017_fitted.Rdata"))
+load(here("validation/Andersson2017_raw.Rdata"))
 
 ```
 
@@ -1241,17 +1209,42 @@ bic.plot <- lapply(A2017.bic, function(x) {
     mutate_at(c("subject", "model"), as.factor)
   
   p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight)) +
-    scale_fill_continuous(name = "Schwarz\nweight") +
-    scale_x_discrete(name = "Number of states in model", labels = as.character(1:5))
+    scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
+    scale_y_discrete(name = "Subject") +
+    scale_fill_distiller(name = "Schwarz\nweight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), palette = "Spectral")
   
   return(p)
 })
 
 ```
 
-To examine whether HMMs are accurately describing eye movements, I applied them with one, two, three, four, and five states on two benchmark data sets and compared their Schwarz weights. For the Andersson et al. [-@Andersson2017] data set, I expected the highest weights for the three-state models in the image condition. For the moving dots and video condition, I predicted the highest weights for the four-state models. Figure X shows the Schwarz weights for different subjects and models in the image condition. For all subjects, the five-state model displays the highest weight, suggesting that it is the most likely to have generated the data. In the moving dots condition, the five-state model has the highest weights for most subjects, but the one-, three, and four-state models exhibit the highest weights for two subjects each (see Figure X). The video condition has the same pattern as the image condition, as the five-state model consistently has the highest weights (see Figure X). In contrast to my hypothesis, applying different HMMs to the Andersson et al. data suggests that the five-state model has most likely generated the data. Except for the moving dots condition, there was little variation in the Schwarz weights, indicating large differences in the model likelihoods. The model comparison for the Ehinger et al. [-@Ehinger2019] data set yielded similar results (see Appendix).
+To examine whether HMMs are accurately describing eye movements, I applied gazeHMM with one, two, three, four, and five states on two benchmark data sets and compared the Schwarz weights of the HMMs. Schwarz weights are the result of transforming a set of BIC values. They can be interpreted as the probability for a model to have generated the data it was fitted to. For the @Andersson2017 data set, I expected the highest weights for the three-state models in the image condition. For the moving dots and video conditions, I predicted the highest weights for the four-state model. Figure \@ref(fig:plot-schwarz-weights-img) shows the Schwarz weights for different subjects and models in the image condition. For all subjects, the five-state model displays the highest weight, suggesting that it hast most likely generated the data. In the moving dots condition, the five-state model has the highest weights for most subjects, but the one-, three, and four-state models exhibit the highest weights for two subjects each (see Figure \@ref(fig:plot-schwarz-weights-dots)). The video condition has the same pattern as the image condition, as the five-state model consistently has the highest weights (see Figure \@ref(fig:plot-schwarz-weights-vid)). In contrast to my hypothesis, applying different HMMs to the @Andersson2017 data suggests that the five-state model has most likely generated the data. Except for the moving dots condition, there was little variation in the Schwarz weights, indicating large differences in the model likelihoods. The model comparison for the @Ehinger2019 data set yielded similar results (see Appendix).
 
-### Comparison to other algorithms
+(ref:plot-schwarz-weights-img) Schwarz weights displayed for each subject and HMMs with different numbers of states. Models were applied to the image condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-schwarz-weights-img, fig.cap="(ref:plot-schwarz-weights-img)"}
+
+print(bic.plot[[2]])
+
+```
+
+(ref:plot-schwarz-weights-dots) Schwarz weights displayed for each subject and HMMs with different numbers of states. Models were applied to the moving dots condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-schwarz-weights-dots, fig.cap="(ref:plot-schwarz-weights-dots)"}
+
+print(bic.plot[[1]])
+
+```
+
+(ref:plot-schwarz-weights-vid) Schwarz weights displayed for each subject and HMMs with different numbers of states. Models were applied to the video condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-schwarz-weights-vid, fig.cap="(ref:plot-schwarz-weights-vid)"}
+
+print(bic.plot[[3]])
+
+```
+
+### Comparison to Other Algorithms
 
 ```{r calculate duration RMSD, include=FALSE}
 
@@ -1588,12 +1581,18 @@ disag.df <- disag.df %>% pivot_longer(c("Image", "Dots", "Video"), names_to = "C
 
 disag.plot <- ggplot(disag.df, aes(x = Algorithm, y = Ratio, fill = Condition)) + 
   geom_col(position = "dodge") + 
-  scale_y_continuous(name = "Disagreement ratio (in %)", limits = c(0, 100), breaks = c(0, 0.25, 0.5, 0.75, 1)*100) +
+  scale_y_continuous(name = "Disagreement (in %)", limits = c(0, 100), breaks = c(0, 0.25, 0.5, 0.75, 1)*100) +
   scale_x_discrete(name = "") + coord_flip()
 
 ```
 
-The hypothesis that HMMs improve the classification performance of eye movement events was investigated by comparing gazeHMM against other algorithms. Therefore, I applied gazeHMM with four events to the Andersson et al. (2017) data set. First, I calculated the RMSD [^1] as described in the original article by Andersson et al. for all algorithms included in the study plus gazeHMM. Table \@ref(tab:tab-rmsd-4-fix) shows that in all three conditions, gazeHMM has a higher RMSD than all the the other algorithms for classified fixations due to a large amount of very short fixations. For saccades, gazeHMM has the fourth lowest RMSD of the algorithms in the image and video conditions but the second highest in the moving dots condition (see Table \@ref(tab:tab-rmsd-4-sac)). Here, gazeHMM overestimated the number and duration of saccades (either slightly or substantially). Moreover, gazeHMM underestimated the number and duration of PSOs in the image and moving dots conditions, leading to the highest and intermediate RMSD among the competitors, repsectively (see Table \@ref(tab:tab-rmsd-4-pso)). In the video condition the duration was slightly overestimated but the duration was underestimated with the highest RMSD. No other algorithm was designed to classify smooth pursuits, but gazeHMM classified a large number of short smooth pursuits, causing a substantially higher RMSD than among the human coders (see Figure \@ref(tab:tab-rmsd-4-sp)). In sum, except for saccades and PSOs, gazeHMM performed worse with regard to the duration of classified events compared to the other algorithms.  
+#### Event Durations
+The hypothesis that HMMs improve the classification performance of eye movement events was investigated by comparing gazeHMM against other algorithms. Therefore, I applied gazeHMM with four events to the @Andersson2017 data set. Therefore, I calculated the RMSD [^3] of event durations  as described in the original article by Andersson et al. for all algorithms included in the study plus gazeHMM: First, the mean and standard deviation of event durations as well as the number of events were normalized to [0,1] for each coder and algorithm. Second, the sum of the root square deviation between each algorithm and the average of the two human coders is computed. This metric can only be relatively interpreted [@Andersson2017].  
+Table \@ref(tab:tab-rmsd-4-fix) shows that, in all three conditions, gazeHMM has a higher RMSD than all the the other algorithms for classified fixations. The high RMSD values were mostly due to a large amount of very short fixations.  
+For saccades, gazeHMM has a relatively low RMSD of the algorithms in the image and video condition and a relatively high RMSD in the moving dots condition (see Table \@ref(tab:tab-rmsd-4-sac)). Here, gazeHMM overestimated the duration of saccades, as indicated by high mean and SD durations.  
+For PSOs, gazeHMM had the highest RMSD in the image and video condition (see Table \@ref(tab:tab-rmsd-4-pso)). In the moving dots condition, its RMSD was lower than for NH [@Nystrom2010] but higher than for LNS [@Larsson2013]. Here, gazeHMM underestimated the number of PSOs and their duration compared to the human coders.  
+No other algorithm in the study was designed to classify smooth pursuits, but gazeHMM classified a large number of short smooth pursuits, causing a substantially higher RMSD than the human coders (see Figure \@ref(tab:tab-rmsd-4-sp)).  
+In sum, gazeHMM did not outperform all other algorithms regarding the RMSD of event durations compared to human coders. The duration of fixations and smooth pursuits was largely underestimated and the number of these two events largely overestimated. For saccades and PSOs, gazeHMM estimated relatively accurate durations and event numbers, but didn't reach the best algorithms.
 
 (ref:tab-rmsd-4-fix) Mean and standard deviations of fixation durations, number of fixations, and RMSD between fixation durations classified by algorithms and human coders
 (ref:tab-rmsd-4-fix-note) Durations are displayed in seconds. gazeHMM classified four events. RMSD = root mean square deviation. Table adapted from @Andersson2017.
@@ -1602,8 +1601,9 @@ The hypothesis that HMMs improve the classification performance of eye movement 
 
 apa_table(rmsd.table[[3]][[1]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
-          col_spanners = list("Moving dots" = c(2, 5), "Image" = c(6, 9), "Video" = c(10, 13)),
+          col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
+          format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-rmsd-4-fix)",
           note = "(ref:tab-rmsd-4-fix-note)")
 
@@ -1614,10 +1614,11 @@ apa_table(rmsd.table[[3]][[1]],
 
 ```{r tab-rmsd-4-sac}
 
-apa_table(rmsd.table[[3]][[1]],
+apa_table(rmsd.table[[3]][[2]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
-          col_spanners = list("Moving dots" = c(2, 5), "Image" = c(6, 9), "Video" = c(10, 13)),
+          col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
+          format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-rmsd-4-sac)",
           note = "(ref:tab-rmsd-4-sac-note)")
 
@@ -1628,10 +1629,11 @@ apa_table(rmsd.table[[3]][[1]],
 
 ```{r tab-rmsd-4-pso}
 
-apa_table(rmsd.table[[3]][[1]],
+apa_table(rmsd.table[[3]][[3]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
-          col_spanners = list("Moving dots" = c(2, 5), "Image" = c(6, 9), "Video" = c(10, 13)),
+          col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
+          format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-rmsd-4-pso)",
           note = "(ref:tab-rmsd-4-pso-note)")
 
@@ -1642,18 +1644,25 @@ apa_table(rmsd.table[[3]][[1]],
 
 ```{r tab-rmsd-4-sp}
 
-apa_table(rmsd.table[[3]][[1]],
+apa_table(rmsd.table[[3]][[4]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
-          col_spanners = list("Moving dots" = c(2, 5), "Image" = c(6, 9), "Video" = c(10, 13)),
+          col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
+          format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-rmsd-4-sp)",
           note = "(ref:tab-rmsd-4-sp-note)")
 
 ```
 
-[^1]: In my proposal, I declared to compute the RMSE instead of RMSD. However, since I conducted an in sample comparison, the term deviation is more appropriate. Andersson et al. (2017) also referred to it as RMSD.
+[^3]: In my proposal, I declared to compute the RMSE instead of RMSD. However, since I conducted an in sample comparison, the term deviation is more appropriate. Andersson et al. (2017) also referred to it as RMSD.
 
-Second, I compared gazeHMM to the other algorithms by using Cohen's kappa as a measure of agreement between algorithms and human coders (see Table \@ref(tab:tab-kappa-4)). For fixations, absolute kappa values in all three conditions indicated a slight to fair agreement between gazeHMM and human coders. Compared to the other algorithms, the agreement of gazeHMM was the lowest in the image condition but the hightest in the moving dots and video conditions. In contrast, gazeHMM showed absolute kappa values for saccades that correspond to a moderate to substantial agreement. In all three conditions, the agreement was intermediate in the moving dots condition and higher than for most other algorithms in the image and video conditions. For PSOs, absolute kappa values showed slight to fair agreement agreement to human coders. It was lower in the moving dots condition but intermediate in the image and video conditions compared to the other algorithms. The agreement for smooth puruits was moderate in the moving dots condition but slight in the image and video conditions. No other algorithm in the study was designed to detect smooth pursuits. In sum, gazeHMM classified samples as saccades more similar to human coders than most other algorithms. For the other events, the classification differed from human coding more than for most other algorithms. 
+#### Sample-to-sample Agreement
+Moreover, I compared gazeHMM to the other algorithms by using Cohen's kappa as a measure of sample-to-sample agreement between algorithms and human coders (see Table \@ref(tab:tab-kappa-4)). Cohen's kappa indicates the agreement between to classifiers accounting for the agreement due to chance. Absolute values were interpreted according to @Landis1977.  
+For fixations, absolute kappa values in all three conditions indicated a slight to fair agreement between gazeHMM and human coders. Compared to the other algorithms, the agreement of gazeHMM was the lowest in the image condition but the highest in the moving dots and video condition.  
+For saccades, gazeHMM showed kappa values that correspond to a moderate to substantial agreement were relatively high compared to the other algorithms. However, gazeHMM never reached the highest agreement.  
+For PSOs, absolute kappa values showed slight to fair agreement agreement to human coders. It was relatively low in the moving dots condition and mediocre in the image and video conditions compared to NH and LNS.  
+The agreement for smooth puruits was moderate in the moving dots condition but slight in the image and video conditions. No other algorithm in the study was designed to detect smooth pursuits.  
+In sum, gazeHMM revealed a relatively high sample-to-sample agreement to human coders for saccades. For PSOs and smooth pursuits, I found mediocre agreement. The performance for fixations was absolutely and relatively low.
 
 (ref:tab-kappa-4) Cohen's kappa between human coders and algorithms for different conditions and events
 (ref:tab-kappa-4-note) Negative values were set to zero. gazeHMM classified four events. Table adapted from @Andersson2017.
@@ -1672,9 +1681,12 @@ apa_table(tab.kappa.4,
 
 ```
 
-Third, I computed the disagreement ratio as the percentage of samples that were classified differently by gazeHMM compared to the human coders. Figure \@ref(fig:plot-disag) shows that in the image condition, gazeHMM with four events has a higher disagreement ratio than all but two of the other algorithms. In the moving dots and video conditions, the disagreement ratios are considerably lower than for all the other algorithms. Notably, gazeHMM's disagreement ratios were similar across conditions (around 45%).
+#### Disagreement and Confusion
+At last, I computed the overall disagreement [^4] as the percentage of all samples taken together that were classified differently by gazeHMM than the human coders. Figure \@ref(fig:plot-disag) shows that in the image condition, gazeHMM with four events had a higher overall disagreement than all but two of the other algorithms. In the moving dots and video conditions, the disagreement was considerably lower than for all the other algorithms. Notably, gazeHMM's disagreement was similar across conditions (around 45%). In summary, gazeHMM had a lower overall disagreement than all other algorithms in the moving dots and video conditions but higher disagreement in the image condition.
 
-(ref:plot-disag) Disagreement ratio between algorithms and human coders for different conditions. gazeHMM-3 classified three and gazeHMM-4 classified four events. Figure adapted from @Andersson2017.
+[^4]: Even though I proposed to compute the *disagreement ratio* and @Andersson2017 also used that term, the comparison technically involves percentages and not ratios. Thus, I decdided to use only the term *disagreement* instead.
+
+(ref:plot-disag) Disagreement between algorithms and human coders for different conditions (in %). gazeHMM-3 classified three and gazeHMM-4 classified four events. Figure adapted from @Andersson2017.
 
 ```{r plot-disag, fig.cap="(ref:plot-disag)"}
 
@@ -1700,11 +1712,14 @@ apa_table(tab.conf.4,
 
 ```
 
-Contrary to my second hypothesis, applying gazeHMM to a benchmark data set revealed that it did not outperform all other algorithms with regard to RMSD, sample-to-sample agreement, or disagreement ratio. It rather fared better or worse than most algorithms for different events and conditions. Especially for saccades, the agreement was relatively high and improved upon the IHMM algorithm included in the study.  
-Even though it was not confirmed by the model comparison, applying gazeHMM with three states to static data might be more appropriate and yield better validation results. Table \@ref(tab:tab-rmsd-3) shows the RMSD between gazeHMM and human coders only for the image condition. For fixations, gazeHMM shows a comparably low RMSD and only two other algorithms have lower values. Oppositely, saccades had the highest RMSD among the compared algorithms. The same result was found for PSOs.  
-The agreement between gazeHMM with three states and the human coders measured by Cohen's kappa is displayed in Table \@ref(tab:tab-kappa-3) (only for the image condition). For fixations, the absolute kappa indicated substantial agreement and was high compared to the other algorithms. The absolute kappa for saccades corresponded to moderate agreement. Compared to the other algorithms, it was rather low. For PSOs, the absolute agreement was fair, but intermediate with regard to the other algorithms.  
-Figure \@ref(fig:plot-disag) illustrates the disagreement ratio between gazeHMM with three events and the human coders compared to the other algorithms. In the image condition, the disagreement ratio was slightly lower for gazeHMM than for all the other algorithms.
-Summing up, using gazeHMM with three states increased the agreement to human coding with regard to fixation durations and samples classified as fixations. However, for saccades and PSOs the agreement decreased.
+Contrary to my second hypothesis, applying gazeHMM to a benchmark data set revealed that it did not outperform all other algorithms in terms of RMSD and sample-to-sample agreement. The two criteria rather indicated a mediocre performance of gazeHMM. However, the overall disagreement was lower for gazeHMM than for all other algorithms in the dynamic conditions but the highest in the static image condition.  
+Looking at the confusion matrix in Table \@ref(tab:tab-conf-4), it can be seen that gazeHMM confused fixations and smooth pursuit to a large extend. In the image condition, it overclassified smooth pursuit events, while they were underclassified in the dynamic conditions.
+
+### gazeHMM With Three States
+Even though it was not confirmed by the model comparison, applying gazeHMM with three states to static data seems theoretically more appropriate. Including only three states could prevent gazeHMM from overclassifying smooth pursuits in the image data and yield better validation results. Therefore, I decided to apply gazeHMM with three states to the image dat and repeat the comparison to other algorithms exploratorily.  
+Table \@ref(tab:tab-rmsd-3) shows the RMSD between gazeHMM and human coders only for the image condition. For fixations, gazeHMM shows a comparably low RMSD but it was relatively high for saccades and PSOs. 
+The sample-to-sample agreement between gazeHMM with three states and the human coders measured by Cohen's kappa is displayed in Table \@ref(tab:tab-kappa-3) (only for the image condition). For fixations, the absolute kappa indicated substantial agreement and was relatively high compared to the other algorithms. The absolute kappa for saccades corresponded to moderate agreement. Compared to the other algorithms, it was rather low. For PSOs, the absolute agreement was fair, but relatively low compared to the other algorithms.  
+Figure \@ref(fig:plot-disag) illustrates the overall disagreement between gazeHMM with three events and the human coders compared to the other algorithms. In all three conditions, the disagreement was slightly lower for gazeHMM than for all the other algorithms. Compared to gazeHMM with four states, the RMSD decreased while the sample-to-sample agreement increased for fixations. For saccades and PSOs, the opposite pattern was found. The overall disagreement substantially decreased. Overall, applying gazeHMM with three states to static data seems more appropriate, since the increase in fixation classification outweighs the decrease in classification of saccades and PSOs. There was even some support for my second hypothesis since gazeHMM had lower overall disagreement to human coders than all other algorithms.
 
 (ref:tab-rmsd-3) Mean and standard deviation of event durations, number of events, and RMSD between event durations classified by algorithms and human coders for the image condition
 (ref:tab-rmsd-3-note) Durations are displayed in seconds. gazeHMM classified three events. RMSD = root mean square deviation. Table adapted from @Andersson2017.
@@ -1726,6 +1741,7 @@ apa_table(tab.rmsd.3,
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Fixations" = c(2, 5), "Saccades" = c(6, 9), "PSOs" = c(10, 13)),
           font_size = "tiny",
+          format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-rmsd-3)",
           note = "(ref:tab-rmsd-3-note)")
 
@@ -1747,5 +1763,19 @@ apa_table(tab.kappa.3,
 
 ```
 
-# Technical Appendix
+# Discussion
+In this report, I presented gazeHMM, a novel algorithm for classifying gaze data into eye movement events. The algorithm models velocity, acceleration, and sample-to-sample angle signals with gamma distributions and a mixture of von-Mises and a uniform distribution. An HMM classifies the gaze samples into fixations, saccades, and optionally PSOs, and/or smooth pursuits. A simulation study revealed that the generative model of gazeHMM recovered parameters and hidden state sequence well with a few exceptions. Adding smooth pursuits to the model and noise to the generated data were the most critical factors for decreasing recovery. In contrast, higher sample sizes yielded a better parameter recovery. The variation in starting values did not affect the recovery but the amount of missing data decreased the recovery of hidden states. I applied gazeHMM with different numbers of states to benchmark data and compared the model fit, showing that a five-state HMM had consistently most likely generated the data. This result speaks against my first hypothesis that HMMs are useful generative models for eye movements. When comparing gazeHMM with four events against other algorithms and human coders, it did not show the best performance for the duration and number of classified events nor the sample-to-sample agreement across all conditions. However, it had a lower overall disagreement for dynamic data but higher disagreement for static data. I argued that four states might not be appropriate for static data and additionally applied gazeHMM with three states to them. That led to substantially better classifications for fixations, but slightly worse performance for saccades and PSOs. With three states, gazeHMM had a lower overall disagreement than all other algorithms. I treat this pattern as moderate evidence for my second hypothesis that HMMs improve the classification of eye movements. Taken together, I only found some evidence for the one part of my research question: HMMs improve classifying gaze data but not describing them.  
 
+
+
+\newpage
+
+# Technical Appendix
+# References
+
+\begingroup
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
+<div id = "refs"></div>
+\endgroup
