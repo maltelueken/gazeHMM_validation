@@ -1218,7 +1218,64 @@ bic.plot <- lapply(A2017.bic, function(x) {
 
 ```
 
-To examine whether HMMs are accurately describing eye movements, I applied gazeHMM with one, two, three, four, and five states on two benchmark data sets and compared the Schwarz weights of the HMMs. Schwarz weights are the result of transforming a set of BIC values. They can be interpreted as the probability for a model to have generated the data it was fitted to. For the @Andersson2017 data set, I expected the highest weights for the three-state models in the image condition. For the moving dots and video conditions, I predicted the highest weights for the four-state model. Figure \@ref(fig:plot-schwarz-weights-img) shows the Schwarz weights for different subjects and models in the image condition. For all subjects, the five-state model displays the highest weight, suggesting that it hast most likely generated the data. In the moving dots condition, the five-state model has the highest weights for most subjects, but the one-, three, and four-state models exhibit the highest weights for two subjects each (see Figure \@ref(fig:plot-schwarz-weights-dots)). The video condition has the same pattern as the image condition, as the five-state model consistently has the highest weights (see Figure \@ref(fig:plot-schwarz-weights-vid)). In contrast to my hypothesis, applying different HMMs to the @Andersson2017 data suggests that the five-state model has most likely generated the data. Except for the moving dots condition, there was little variation in the Schwarz weights, indicating large differences in the model likelihoods. The model comparison for the @Ehinger2019 data set yielded similar results (see Appendix).
+```{r calculate integrated complete likelihood criterion, include=FALSE}
+
+# Compute ICL
+
+ICL <- function(mod) {
+  
+  -2*logLik(mod, method = "classification") + npar(mod)*log(nobs(mod))
+  
+}
+
+A2017.icl <- lapply(A2017.fit, function(stim) {
+  out <- lapply(stim, function(subj) {
+    out <- lapply(1:length(subj), function(mod) {
+      
+      if(mod == 1) {
+        
+        icl <- try(-2*subj[[mod]][["LL"]] + 6*log(subj[[mod]][["N"]]))
+        
+      } else {
+        
+        icl <- try(ICL(subj[[mod]]$model))
+        
+      }
+      
+      return(ifelse(is.numeric(icl), icl, NA))
+    })
+    
+    return(schwarz.weights(unlist(out)))
+  })
+  
+  df <- as.data.frame(reduce(out, rbind))
+  
+  names(df) <- paste("model_", 1:length(stim[[1]]), sep = "")
+  
+  return(df)
+})
+
+
+# Create ICL weight plots
+
+icl.plot <- lapply(A2017.icl, function(x) {
+  
+  data.long <- x %>% 
+    mutate(subject = 1:nrow(x)) %>%
+    pivot_longer(names(x), names_to = "model", values_to = "weight") %>%
+    mutate_at(c("subject", "model"), as.factor)
+  
+  p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight)) +
+    scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
+    scale_y_discrete(name = "Subject") +
+    scale_fill_distiller(name = "ICL weight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), palette = "Spectral")
+  
+  return(p)
+})
+
+```
+
+To examine whether HMMs are accurately describing eye movements, I applied gazeHMM with one, two, three, four, and five states on two benchmark data sets and compared the Schwarz weights of the HMMs. Schwarz weights are the result of transforming a set of BIC values. They can be interpreted as the probability for a model to have generated the data it was fitted to. For the @Andersson2017 data set, I expected the highest weights for the three-state models in the image condition. For the moving dots and video conditions, I predicted the highest weights for the four-state model. Figure \@ref(fig:plot-schwarz-weights-img) shows the Schwarz weights for different subjects and models in the image condition. For all subjects, the five-state model displays the highest weight, suggesting that it hast most likely generated the data. In the moving dots condition, the five-state model has the highest weights for most subjects, but the one-, three, and four-state models exhibit the highest weights for two subjects each (see Figure \@ref(fig:plot-schwarz-weights-dots)). The video condition has the same pattern as the image condition, as the five-state model consistently has the highest weights (see Figure \@ref(fig:plot-schwarz-weights-vid)). In contrast to my hypothesis, applying different HMMs to the @Andersson2017 data suggests that the five-state model has most likely generated the data. Except for the moving dots condition, there was little variation in the Schwarz weights, indicating large differences in the model likelihoods. The model comparison for the @Ehinger2019 data set yielded similar results (see Appendix). A recent model recovery study showed that the BIC tended to prefer overly complex HMMs when they were misspecified [e.g., the conditional independence assumption was violated; @Pohle2017]. Instead, the integrated completed likelihood (ICL) criterion [@Biernacki2013] performed better in choosing the correct data generating model. Therefore, I computed the weighted ICL criterion for the HMMs fitted to the benchmark data sets. Using the ICL as the model selection criterion yielded very similar results to the BIC (see Appendix). The preference for the five-state model was even more consistent across conditions and subjects.
 
 (ref:plot-schwarz-weights-img) Schwarz weights displayed for each subject and HMMs with different numbers of states. Models were applied to the image condition of the @Andersson2017 data set. Higher weights indicate better model fit.
 
@@ -1764,12 +1821,36 @@ apa_table(tab.kappa.3,
 ```
 
 # Discussion
-In this report, I presented gazeHMM, a novel algorithm for classifying gaze data into eye movement events. The algorithm models velocity, acceleration, and sample-to-sample angle signals with gamma distributions and a mixture of von-Mises and a uniform distribution. An HMM classifies the gaze samples into fixations, saccades, and optionally PSOs, and/or smooth pursuits. A simulation study revealed that the generative model of gazeHMM recovered parameters and hidden state sequence well with a few exceptions. Adding smooth pursuits to the model and noise to the generated data were the most critical factors for decreasing recovery. In contrast, higher sample sizes yielded a better parameter recovery. The variation in starting values did not affect the recovery but the amount of missing data decreased the recovery of hidden states. I applied gazeHMM with different numbers of states to benchmark data and compared the model fit, showing that a five-state HMM had consistently most likely generated the data. This result speaks against my first hypothesis that HMMs are useful generative models for eye movements. When comparing gazeHMM with four events against other algorithms and human coders, it did not show the best performance for the duration and number of classified events nor the sample-to-sample agreement across all conditions. However, it had a lower overall disagreement for dynamic data but higher disagreement for static data. I argued that four states might not be appropriate for static data and additionally applied gazeHMM with three states to them. That led to substantially better classifications for fixations, but slightly worse performance for saccades and PSOs. With three states, gazeHMM had a lower overall disagreement than all other algorithms. I treat this pattern as moderate evidence for my second hypothesis that HMMs improve the classification of eye movements. Taken together, I only found some evidence for the one part of my research question: HMMs improve classifying gaze data but not describing them.  
+In this report, I presented gazeHMM, a novel algorithm for classifying gaze data into eye movement events. The algorithm models velocity, acceleration, and sample-to-sample angle signals with gamma distributions and a mixture of von-Mises and a uniform distribution. An HMM classifies the gaze samples into fixations, saccades, and optionally PSOs, and/or smooth pursuits. A simulation study revealed that the generative model of gazeHMM recovered parameters and hidden state sequence well with a few exceptions. Adding smooth pursuits to the model and noise to the generated data were the most critical factors for decreasing recovery. In contrast, higher sample sizes yielded a better parameter recovery. The variation in starting values did not affect the recovery but the amount of missing data decreased the recovery of hidden states. I applied gazeHMM with different numbers of states to benchmark data and compared the model fit, showing that a five-state HMM had consistently most likely generated the data. This result speaks against my first hypothesis that HMMs are useful generative models for eye movements. When comparing gazeHMM with four events against other algorithms and human coders, it did not show the best performance for the duration and number of classified events nor the sample-to-sample agreement across all conditions. However, it had a lower overall disagreement for dynamic data but higher disagreement for static data. I argued that four states might not be appropriate for static data and additionally applied gazeHMM with three states to them. That led to substantially better classifications for fixations, but slightly worse performance for saccades and PSOs. With three states, gazeHMM had a lower overall disagreement than all other algorithms. I treat this pattern as moderate evidence for my second hypothesis that HMMs improve the classification of eye movements. Taken together, I only found some evidence for one part of my research question: HMMs improve classifying gaze data but not describing them.  
+Considering the results of the simulation study, it seems reasonable that adding the smooth pursuit state to the HMM decreased parameter and state recovery: It is the event that is overlapping most closely with another event (fixations) in terms of velocity, acceleration, and sample-to-sample angle. The overlap can cause the HMM to confuse parameters and hidden states. The decrease in parameter recovery (especially for shape parameters) due to noise shows that the overlap is enhanced by more dispersion in the data. The shape parameters might be particularly vulnerable to extreme data points. The decrease in state recovery for long and many intervals of missing data can be explained by the tendency of HMMs to stay in the same state when no information is available from the data. However, the decrease was rather small, leading to the conclusion that the HMM can deal well with missing data. Despite these drawbacks, the recovery of the generative model in gazeHMM seems very promising. The simulation study gives also an approximate reference for the maximum recovery of hidden states that can be achieved by the HMM (Cohen's kappa values of ~1 for two, ~0.95 for three, and ~0.8 for four events).  
+The model comparison on the benchmark data clearly provided evidence against HMMs being useful generative models for eye movement data. Even using a model selection criterion that identified correct models succesfully in previous model comparison studies [@Pohle2017], did not yield the expected pattern. There are several explanations for this result:  
+(1) *There were more eye movement events present in the data than I expected*. Eye movement events can be divided into subevents. For example, fixations consist of drift and tremor movements [@Duchowski2017] and PSOs encompass dynamic, static, and glissadic over- and undershoots [@Larsson2013]. A study on a recently developed HMM algorithm supports this explanation: @Houpt2018 applied the unsupervised BP-AR-HMM algorithm to the @Andersson2017 data set and classified more distinct states than the human coders. Some of the states classified by BP-AR-HMM matched the same event coded by humans. Since the subevents are usually not interesting for users of classification algorithms, the ability of HMMs to classify might limit their ability to describe eye movements here.  
+(2) *Model selection criteria are generally not appropriate for comparing HMMs with differnt numbers of states*. This argument has been discussed in the field of ecology [see @Li2017], where studies found that selection criteria preferred models with more states than expected [similar to the result of this study; e.g., @Langrock2015]. @Li2017 explain this bias with the simplicity of the submodels in HMMs: Initial state, transition, and response models for each state are usually relatively simple. When they do not describe the processes in the respective states accurately, the selection criteria compensate for that by preferring a model with more states. Thus, there are not more latent states present in the data, but the submodels of the HMM are misspecified or too simple. Correcting for model misspecifications, led to better model recovery in studies on animal movements [@Langrock2015; @Li2017]. However, @Pohle2017 showed in simulations that the ICL identified the correct model despite several misspecifications. It has to be noted that the study by @Pohle2017 only used data generating models with two states.  
+(3) *The submodels of gazeHMM were misspecified*. @Pohle2017 identified two scenarios in which model recovery using the ICL did not give optimal results: Outliers in the data and inadequate distributions in the response models. Both situations could apply to gazeHMM and eye movement data. Outliers occur frequently in eye-tracking data due to measurement error. Choosing adequate response distributions in HMMs is usually difficult and can depend on the individual and task the data is obtained from [@Langrock2015]. Moreover, gazeHMM only estimated intercepts for all parameters and thus, no time-varying covariates were included [cf. @Li2017]. This aspect could indeed oversimplify the complex nature of eye movement data.
+Comparing gazeHMM to other algorithms on benchmark data showed that gazeHMM moderately improved the event classification in agreement with human coders. However, the evaluation criteria (RMSD of event durations, sample-to-sample agreement, and overall disagreement) yieled different results. The fact that gazeHMM outperformed all other algorithms regarding the overall disagreement can be because it is the only algorithm classifying five events. Of course, that makes it still a useful tool for classification. Nevertheless, Cohen's kappa values of 0.72 (saccades - video - four states) or 0.68 (fixations - image - three states) indicate substantial agreement to human coders, especially in light of the maximum reference of ~0.8 from the simulation study. At this point it is important to mention that human coding should not be considered a gold standard in event classification: @Hooge2018 observed substantial differences between coders and within coders over time. Despite these differences, they recommend comparisons with human coding to demonstrate the performance of new algorithms and finding errors in their design.
+
+## Advantages of gazeHMM
+In view of the four proposed goals that gazeHMM should fulfill, I can draw the following conclusions: Even though gazeHMM does require some parameter settings (in the pre- and postprocessing), they have only minor influence on the classification and are merely included to compensate for some drawbacks of the generative model. Their default values should be appriate for most applications. A major advantage of gazeHMM is that it does not require human labeled data as input. Instead, it estimates all parameters and hidden states from the data. Since human coding is quite laborious, difficult to reproduce, and by times inconsistent [as noted earlier, @Hooge2018], this property makes gazeHMM a good alternative to other recently developed algorithms that require human coded input [@Pekkanen2017; @Zemblys2018; @Bellet2019]. This could also explain why the agreement to human coding is lower for gazeHMM than for algorithms that learn from human labeled data. Another advantage of gazeHMM is its ability to classify four eye movement events, namely fixations, saccades, PSOs, and smooth pursuit. Whereas most algorithms only parse fixations and saccades [@Andersson2017], few are able to classify PSOs [e.g., @Zemblys2017], and even less categorize smooth pursuits [e.g., @Pekkanen2017]. However, including smooth pursuits in gazeHMM led to some undesirable classifications on benchmark data, resulting in rapid switching between fixation and smooth pursuit events. Therefore, I recommend using gazeHMM with four events onyl for exploratory purposes. Without smooth pursuits, I consider gazeHMM's classification as appropriate for application. Lastly, its implementation in R using depmixS4 [@Visser2010] should make gazeHMM a tool that is easy to use and customize for individual needs.
+
+## Future Directions
+Despite its advantages, there several aspects in which gazeHMM can be improved: 
+
+
+Multivariate gamma - conditional independence
+Blinks and noise
+Non-parametric response distributions
+Time varying covariates
+Semi-HMM
+Metric separating fixations and sp
+Constraining parameters
+
+
 
 
 
 \newpage
 
+# Appendix
 # Technical Appendix
 # References
 
