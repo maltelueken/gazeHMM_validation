@@ -93,7 +93,7 @@ fr <- 500
 As part of answering my research questions, I developed an algorithm named gazeHMM to classify gaze data into discrete eye movement events. The following section describes the development of gazeHMM and its final version that has been used to obtain results. Technical details can be found in the Technical Appendix.
 
 ## Eye Movement Metrics
-Many different metrics can be used to describe gaze data and eye movement events [@Zemblys2018]. Here, the goal is to find those metrics that separate the gaze data samples belonging to different events the best. However, many metrics rely on thresholds or window ranges that have to be set by the user [e.g., the distance between the mean position in a 100 ms window before and after each sample, see @Olsson2007, and @Zemblys2018]. This can be problematic because these parameters are often set without theoretical justification and they differ substantially between metrics. Belonging to the most basic metrics, which do not require parameter settings, I used velocity, acceleration, and sample-to-sample angle [similar to relative or change in angle; @Larsson2013] in gazeHMM.  
+Many different metrics can be used to describe gaze data and eye movement events [@Zemblys2018]. Here, the goal is to find those metrics that separate the gaze data samples belonging to different events the best. However, many metrics rely on thresholds or window ranges that have to be set by the user [e.g., the distance between the mean position in a 100 ms window before and after each sample, see @Olsson2007; @Zemblys2018]. This can be problematic because these parameters are often set without theoretical justification and they differ substantially between metrics. Belonging to the most basic metrics, which do not require parameter settings, I used velocity, acceleration, and sample-to-sample angle [similar to relative or change in angle; @Larsson2013] in gazeHMM.  
 Theoretically, these three metrics should separate eye movement events clearly. Fixations typically inherit samples with low velocity and acceleration [@Larsson2013]. Due to tremor, the angle between samples should not follow any direction but a random walk [@Duchowski2017]. In contrast, saccade samples usually have a high velocity and acceleration and follow the same direction. PSO samples tend to have moderate velocity and high acceleration since they occur after high velocity saccades [@Larsson2013]. They are specifically distinguished by their change in direction clustered around 180° [@Pekkanen2017]. Lastly, smooth pursuit samples have a moderate velocity but low acceleration (due to the smoothness) and like saccades they follow the same direction [@Larsson2013; @Leigh2015].
 
 ## Fitering and Smoothing
@@ -181,6 +181,8 @@ After classifying gaze samples into states, gazeHMM applies a postprocessing rou
 
 ## Implementation
 The algorithm is implemented in R [version: 3.6.3; @RCoreTeam2020] and uses the packages signal [@Ligges2015] to compute velocity and acceleration signals, depmixS4 [@Visser2010] for the HMM, and BB [@Varadhan2009] for Barzilai-Borwein spectral projected gradient optimization. The algorithm is available on GitHub (www.github.com/maltelueken/gazeHMM).
+
+\newpage
 
 # Simulation Study
 To assess how well the HMM recovers parameters and state sequences, I conducted a simulation study. The design and analysis of the study were preregistered on the Open Science Framework (https://doi.org/10.17605/OSF.IO/VDJGP). The major part of this section is a direct copy of the preregistration. When appropriate, additional explanations were added and tenses adapted to make the design easier to read and understand.  
@@ -649,8 +651,8 @@ plots.lm.resp <- lapply(regw.resp.data, function(x) {
     facet_wrap(vars(par), scales = "free", labeller = label_bquote(.(parnames[[par]]))) +
     geom_point() + geom_smooth(method = "lm") +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-    scale_x_continuous(name = "True transition probability") +
-    scale_y_continuous(name = "Estimated transition probability")
+    scale_x_continuous(name = "True response parameter") +
+    scale_y_continuous(name = "Estimated response parameter")
   
   return(p)
 })
@@ -887,6 +889,8 @@ plots.acc.expl <- lapply(1, function(y, data) {
 
 ```
 
+\newpage
+
 # Exploratory Results
 ## Simulation Study
 ### Parameter Variation
@@ -911,7 +915,7 @@ print(plots.lm.tr[[1]])
 
 ```
 
-(ref:plot-regresp-1-2) Regression lines between true and estimated transition response parameters of the two-state HMM in part one. Top facet labels indicate response parameters.
+(ref:plot-regresp-1-2) Regression lines between true and estimated response parameters of the two-state HMM in part one. Top facet labels indicate response parameters.
 
 ```{r plot-regresp-1-2, fig.cap="(ref:plot-regresp-1-2)"}
 
@@ -946,7 +950,7 @@ print(plots.lm.tr[[2]])
 
 ```
 
-(ref:plot-regresp-1-3) Regression lines between true and estimated transition response parameters of the three-state HMM in part one. Top facet labels indicate response parameters.
+(ref:plot-regresp-1-3) Regression lines between true and estimated response parameters of the three-state HMM in part one. Top facet labels indicate response parameters.
 
 ```{r plot-regresp-1-3, fig.cap="(ref:plot-regresp-1-3)", fig.height=7}
 
@@ -982,7 +986,7 @@ print(plots.lm.tr[[3]] + theme(axis.text = element_text(size = 8)))
 
 ```
 
-(ref:plot-regresp-1-4) Regression lines between true and estimated transition response parameters of the four-state HMM in part one. Top facet labels indicate response parameters.
+(ref:plot-regresp-1-4) Regression lines between true and estimated response parameters of the four-state HMM in part one. Top facet labels indicate response parameters.
 
 ```{r plot-regresp-1-4, fig.cap="(ref:plot-regresp-1-4)", fig.height=8}
 
@@ -1820,9 +1824,11 @@ apa_table(tab.kappa.3,
 
 ```
 
+\newpage
+
 # Discussion
 In this report, I presented gazeHMM, a novel algorithm for classifying gaze data into eye movement events. The algorithm models velocity, acceleration, and sample-to-sample angle signals with gamma distributions and a mixture of von-Mises and a uniform distribution. An HMM classifies the gaze samples into fixations, saccades, and optionally PSOs, and/or smooth pursuits. A simulation study revealed that the generative model of gazeHMM recovered parameters and hidden state sequence well with a few exceptions. Adding smooth pursuits to the model and noise to the generated data were the most critical factors for decreasing recovery. In contrast, higher sample sizes yielded a better parameter recovery. The variation in starting values did not affect the recovery but the amount of missing data decreased the recovery of hidden states. I applied gazeHMM with different numbers of states to benchmark data and compared the model fit, showing that a five-state HMM had consistently most likely generated the data. This result speaks against my first hypothesis that HMMs are useful generative models for eye movements. When comparing gazeHMM with four events against other algorithms and human coders, it did not show the best performance for the duration and number of classified events nor the sample-to-sample agreement across all conditions. However, it had a lower overall disagreement for dynamic data but higher disagreement for static data. I argued that four states might not be appropriate for static data and additionally applied gazeHMM with three states to them. That led to substantially better classifications for fixations, but slightly worse performance for saccades and PSOs. With three states, gazeHMM had a lower overall disagreement than all other algorithms. I treat this pattern as moderate evidence for my second hypothesis that HMMs improve the classification of eye movements. Taken together, I only found some evidence for one part of my research question: HMMs improve classifying gaze data but not describing them.  
-Considering the results of the simulation study, it seems reasonable that adding the smooth pursuit state to the HMM decreased parameter and state recovery: It is the event that is overlapping most closely with another event (fixations) in terms of velocity, acceleration, and sample-to-sample angle. The overlap can cause the HMM to confuse parameters and hidden states. The decrease in parameter recovery (especially for shape parameters) due to noise shows that the overlap is enhanced by more dispersion in the data. The shape parameters might be particularly vulnerable to extreme data points. The decrease in state recovery for long and many intervals of missing data can be explained by the tendency of HMMs to stay in the same state when no information is available from the data. However, the decrease was rather small, leading to the conclusion that the HMM can deal well with missing data. Despite these drawbacks, the recovery of the generative model in gazeHMM seems very promising. The simulation study gives also an approximate reference for the maximum recovery of hidden states that can be achieved by the HMM (Cohen's kappa values of ~1 for two, ~0.95 for three, and ~0.8 for four events).  
+Considering the results of the simulation study, it seems reasonable that adding the smooth pursuit state to the HMM decreased parameter and state recovery: It is the event that is overlapping most closely with another event (fixations) in terms of velocity, acceleration, and sample-to-sample angle. The overlap can cause the HMM to confuse parameters and hidden states. The decrease in parameter recovery (especially for scale parameters) due to noise shows that the overlap is enhanced by more dispersion in the data. The scale parameters might be particularly vulnerable to extreme data points. The decrease in state recovery for long and many intervals of missing data can be explained by the tendency of HMMs to stay in the same state when no information is available from the data. However, the decrease was rather small, leading to the conclusion that the HMM can deal well with missing data. Despite these drawbacks, the recovery of the generative model in gazeHMM seems very promising. The simulation study gives also an approximate reference for the maximum recovery of hidden states that can be achieved by the HMM (Cohen's kappa values of ~1 for two, ~0.95 for three, and ~0.8 for four events).  
 The model comparison on the benchmark data clearly provided evidence against HMMs being useful generative models for eye movement data. Even using a model selection criterion that identified correct models succesfully in previous model comparison studies [@Pohle2017], did not yield the expected pattern. There are several explanations for this result:  
 (1) *There were more eye movement events present in the data than I expected*. Eye movement events can be divided into subevents. For example, fixations consist of drift and tremor movements [@Duchowski2017] and PSOs encompass dynamic, static, and glissadic over- and undershoots [@Larsson2013]. A study on a recently developed HMM algorithm supports this explanation: @Houpt2018 applied the unsupervised BP-AR-HMM algorithm to the @Andersson2017 data set and classified more distinct states than the human coders. Some of the states classified by BP-AR-HMM matched the same event coded by humans. Since the subevents are usually not interesting for users of classification algorithms, the ability of HMMs to classify might limit their ability to describe eye movements here.  
 (2) *Model selection criteria are generally not appropriate for comparing HMMs with differnt numbers of states*. This argument has been discussed in the field of ecology [see @Li2017], where studies found that selection criteria preferred models with more states than expected [similar to the result of this study; e.g., @Langrock2015]. @Li2017 explain this bias with the simplicity of the submodels in HMMs: Initial state, transition, and response models for each state are usually relatively simple. When they do not describe the processes in the respective states accurately, the selection criteria compensate for that by preferring a model with more states. Thus, there are not more latent states present in the data, but the submodels of the HMM are misspecified or too simple. Correcting for model misspecifications, led to better model recovery in studies on animal movements [@Langrock2015; @Li2017]. However, @Pohle2017 showed in simulations that the ICL identified the correct model despite several misspecifications. It has to be noted that the study by @Pohle2017 only used data generating models with two states.  
@@ -1830,23 +1836,19 @@ The model comparison on the benchmark data clearly provided evidence against HMM
 Comparing gazeHMM to other algorithms on benchmark data showed that gazeHMM moderately improved the event classification in agreement with human coders. However, the evaluation criteria (RMSD of event durations, sample-to-sample agreement, and overall disagreement) yieled different results. The fact that gazeHMM outperformed all other algorithms regarding the overall disagreement can be because it is the only algorithm classifying five events. Of course, that makes it still a useful tool for classification. Nevertheless, Cohen's kappa values of 0.72 (saccades - video - four states) or 0.68 (fixations - image - three states) indicate substantial agreement to human coders, especially in light of the maximum reference of ~0.8 from the simulation study. At this point it is important to mention that human coding should not be considered a gold standard in event classification: @Hooge2018 observed substantial differences between coders and within coders over time. Despite these differences, they recommend comparisons with human coding to demonstrate the performance of new algorithms and finding errors in their design.
 
 ## Advantages of gazeHMM
-In view of the four proposed goals that gazeHMM should fulfill, I can draw the following conclusions: Even though gazeHMM does require some parameter settings (in the pre- and postprocessing), they have only minor influence on the classification and are merely included to compensate for some drawbacks of the generative model. Their default values should be appriate for most applications. A major advantage of gazeHMM is that it does not require human labeled data as input. Instead, it estimates all parameters and hidden states from the data. Since human coding is quite laborious, difficult to reproduce, and by times inconsistent [as noted earlier, @Hooge2018], this property makes gazeHMM a good alternative to other recently developed algorithms that require human coded input [@Pekkanen2017; @Zemblys2018; @Bellet2019]. This could also explain why the agreement to human coding is lower for gazeHMM than for algorithms that learn from human labeled data. Another advantage of gazeHMM is its ability to classify four eye movement events, namely fixations, saccades, PSOs, and smooth pursuit. Whereas most algorithms only parse fixations and saccades [@Andersson2017], few are able to classify PSOs [e.g., @Zemblys2017], and even less categorize smooth pursuits [e.g., @Pekkanen2017]. However, including smooth pursuits in gazeHMM led to some undesirable classifications on benchmark data, resulting in rapid switching between fixation and smooth pursuit events. Therefore, I recommend using gazeHMM with four events onyl for exploratory purposes. Without smooth pursuits, I consider gazeHMM's classification as appropriate for application. Lastly, its implementation in R using depmixS4 [@Visser2010] should make gazeHMM a tool that is easy to use and customize for individual needs.
+In view of the four proposed goals that gazeHMM should fulfill, I can draw the following conclusions: Even though gazeHMM does require some parameter settings (in the pre- and postprocessing), they have only minor influence on the classification and are merely included to compensate for some drawbacks of the generative model. Their default values should be appriate for most applications. A major advantage of gazeHMM is that it does not require human labeled data as input. Instead, it estimates all parameters and hidden states from the data. Since human coding is quite laborious, difficult to reproduce, and by times inconsistent [as noted earlier, @Hooge2018], this property makes gazeHMM a good alternative to other recently developed algorithms that require human coded input [@Pekkanen2017; @Zemblys2018; @Bellet2019]. This could also explain why the agreement to human coding is lower for gazeHMM than for algorithms that learn from human labeled data. Another advantage of gazeHMM is its ability to classify four eye movement events, namely fixations, saccades, PSOs, and smooth pursuit. Whereas most algorithms only parse fixations and saccades [@Andersson2017], few are able to classify PSOs [e.g., @Zemblys2017], and even less categorize smooth pursuits [e.g., @Pekkanen2017]. However, including smooth pursuits in gazeHMM led to some undesirable classifications on benchmark data, resulting in rapid switching between fixation and smooth pursuit events. Therefore, I recommend using gazeHMM with four events only for exploratory purposes. Without smooth pursuits, I consider gazeHMM's classification as appropriate for application. Lastly, its implementation in R using depmixS4 [@Visser2010] should make gazeHMM a tool that is easy to use and customize for individual needs.
 
 ## Future Directions
-Despite its advantages, there several aspects in which gazeHMM can be improved: 
+Despite its advantages, there are several aspects in which gazeHMM can be improved: First, a multivariate distribution could be used to account for the correlation between velocity and acceleration signals [for an example, see @Balakrishnan2009]. Potential problem of this approach might be choosing the right distribution and convergence issues (due to a large number of parameters). Another option to model the correlation could be to include one of the response variables as a covariate of the other.  
+Second, instead of the gamma being the generic (and potentially inappropriate) response distribution, a non-parametric approach could be used: @Langrock2015 use a linear combination of standardized B-splines to approximate response densities, which led to HMMs with less states being preferred. This approach could potentially combat the problem of unexpectedly high-state HMMs being preferred for eye movement data.  
+Third, including covariates of the transition probabilities and response parameters could improve the fit of gazeHMM on eye movement data. As pointed out earlier, just estimating intercepts of parameters could be too simple to model the complexity of eye movements. As candidate covariates I suggest periodic functions of time [@Li2017] which could, for instance, capture the specific pattern of saccades.  
+Fourth, to avoid rapid switching between fixations and smooth pursuits as well as unreasonable short saccades, gazeHMM could explicitly model the duration of events. This can be achieved by setting the diagonal transition probabilities to zero and assign a distribution of state durations to each state [@Bishop2015]. Consequently, the duration distributions of fixations and smooth pursuits could differ from saccades and PSOs. This extension of the HMM is also called hidden semi-Markov model and has been successfully used by @Mihali2017 to classify microsaccades. A drawback of the extension would be higher computational costs.  
+Lastly, allowing constrained parameters in the HMM could replace some of the postprocessing steps in gazeHMM. This could potentially be achieved by using different response distributions or parameter optimization methods. Moreover, switching from the maximum likelihood to the Markov chain Monte Carlo (Bayesian) framework could help avoiding convergence problems with constrained parameters, but would also open new research questions about suitable priors for HMM parameters in the eye movement domain.
 
+## Conclusions
+Both the simulation and validation studies showed that gazeHMM is a suitable algorithm for classifying eye movement events. For smooth pursuits, the classification is not optimal and thus not recommended, yet. On one hand, the algorithm has some advantages over concurrent event classfication algorithms, not relying on human-labeled input being the most important one. On the other hand, it is not able to perform model comparisons as expected and still poses difficulties regarding good model specifications for different eye movement events. These difficulties highlight general challenges for HMMs in general, but also specifically for eye movements. Revisting my research question, I conclude that HMMs are suitable models for classifying eye movement events but still lack the ability to accurately describe them.  
 
-Multivariate gamma - conditional independence
-Blinks and noise
-Non-parametric response distributions
-Time varying covariates
-Semi-HMM
-Metric separating fixations and sp
-Constraining parameters
-
-
-
-
+*Acknowledgment*. I would like to thank my supervisors Ingmar Visser and Simon Kucharsky for their helpful advice on the development and implementation of the study.
 
 \newpage
 
