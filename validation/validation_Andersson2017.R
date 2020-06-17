@@ -8,6 +8,7 @@ library(depmixS4)
 library(parallel)
 library(R.matlab)
 library(psych)
+library(signal)
 
 source("algorithm/gazeHMM.R")
 source("algorithm/model_helper_functions.R")
@@ -104,7 +105,7 @@ fr <- 500
 
 ncores <- detectCores()
 clust <- makeCluster(ncores)
-clusterExport(clust, list("gazeHMM", "onestate_HMM", "preprocess", "res", "dim", "dist", "fr", "A2017"))
+clusterExport(clust, list("gazeHMM", "onestate_HMM", "preprocess", "butter", "filter", "res", "dim", "dist", "fr", "A2017"))
 
 A2017.fit <- lapply(1:length(A2017), function(stim) parLapply(clust, 1:length(A2017[[stim]]), function(subj) {
   

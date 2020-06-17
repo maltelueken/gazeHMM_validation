@@ -13,12 +13,12 @@ Input: x-coordinate, y-coordinate, timestamp, unit of coordinates (px vs. deg), 
 (@) Samples that match the blink indicator are labeled as blinks.
 (@) If the unit is px, the x- and y-coordinates are transformed into va with: 
     i. The coordinates are centered ([0,0] is center)
-    ii. $\theta_{deg} = atan(\frac{x*res_x}{d_{screen}*dim_x})\frac{180}{\pi}$
+    ii. $\theta_{deg} = atan(\frac{x \cdot res_x}{d_{screen} \cdot dim_x})\frac{180}{\pi}$
 (@) Samples that are outside the screen are marked as invalid.
-(@) Velocities and accelerations for the x- and y-coordiantes are calculated using a Savitzky-Golay filter (3rd order, length = 5).
-(@) Combined velocities and accelerations are calculated as: $v = f \sqrt{v_x^2 + v_y^2}$ and $a = f \sqrt{a_x^2 + a_y^2}$ with $f$ as the sampling rate.
-(@) Velocities and accelerations of value zero are nudged to be 0.01.
-(@) Samples with velocity above 1000 deg/s or acceleration above 100000 deg/s$^2$ are marked as invalid.
+(@) Velocities and accelerations for the x- and y-coordiantes are calculated using an SG filter (3rd order, length = 5).
+(@) Combined velocitiy and acceleration are calculated as: $v = f \sqrt{v_x^2 + v_y^2}$ and $a = f \sqrt{a_x^2 + a_y^2}$, with $f$ as the sampling rate. Note that acceleration is only multiplied by the sampling rate once. The second multiplication is done during postprocessing.
+(@) Velocity and acceleration of value zero are nudged to be 0.01.
+(@) Samples with velocity above 1000 deg/s or acceleration above 100 deg/s are marked as invalid.
 (@) The sample-to-sample angle is calculated as: 
 $$\theta_t = atan2(\frac{y_{t+1} - y_t}{x_{t+1} - x_t}) - atan2(\frac{y_t - y_{t-1}}{x_t - x_{t-1}}).$$ 
 Angles are normalized to $[0,2\pi]$ by adding $2\pi$ to negative values.
@@ -58,8 +58,8 @@ it is relabeled as the last different label.
         d. Amplitude: Euclidian distance from start to end
         e. Max. velocity
         f. Avg. velocity
-        g. Max. acceleration $\cdot 1000$
-        h. Avg. acceleration $\cdot 1000$
+        g. Max. acceleration $\times f$
+        h. Avg. acceleration $\times f$
         i. Direction: $\theta = atan2(\frac{end_y - start_y}{end_x - start_x})$
         
 General output: List with a data frame containing the labeled samples, a list with data frames for the different events,

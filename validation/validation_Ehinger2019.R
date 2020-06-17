@@ -98,24 +98,27 @@ fr <- 500
 
 ncores <- detectCores()
 clust <- makeCluster(ncores)
-clusterExport(clust, list("classify_gaze_data", "onestate_HMM", "preprocess", "res", "dim", "dist", "fr", "E2019"))
+clusterExport(clust, list("gazeHMM", "onestate_HMM", "preprocess", "res", "dim", "dist", "fr", "E2019"))
 
 E2019.fit <- parLapply(clust, E2019, function(subj) lapply(subj, function(task) lapply(task, function(df) {
   
   df$time <- (df$time - df$time[1])/1e3
-
+  
+  trstart <- matrix(0.1/(k-1), k, k)
+  diag(trstart) <- 0.9
   
   fit <- list()
   
   fit[["1"]] <- try(onestate_HMM(preprocess(x = df$xp, y = df$yp, t = df$time, unit = "px",
                                             res = res, dim = dim, dist = dist, fr = fr, blink = is.na(df$ps),
-                                            sg.order = 3, sg.length = 5)))
+                                            sg.order = 3, sg.length = 5, sf = c(100, 100))))
   
   for (k in 2:5) {
 
-    fit[[as.character(k)]] <- try(classify_gaze_data(x = df$xp, y = df$yp, t = df$time, unit = "px",
-                                                 res = res, dim = dim, dist = dist, fr = fr, blink = is.na(df$ps),
-                                                 nstates = k))
+    fit[[as.character(k)]] <- try(gazeHMM(x = df$xp, y = df$yp, t = df$time, unit = "px",
+                                          res = res, dim = dim, dist = dist, fr = fr, blink = is.na(df$ps),
+                                          nstates = k, trstart = trstart, 
+                                          random.respstart = F))
 
   }
   
@@ -125,3 +128,15 @@ E2019.fit <- parLapply(clust, E2019, function(subj) lapply(subj, function(task) 
 stopCluster(clust)
 
 save("E2019.fit", file = "validation/Ehinger2019_fitted.Rdata")
+
+
+# Compare models with different states
+
+schwarz.weights <- function(bic, na.rm = T) {
+  
+  d.bic <- bic - min(bic, na.rm = na.rm) # eq 2
+  
+  exp(-0.5 * d.bic)/sum(exp(-0.5 * d.bic), na.rm = na.rm) # eq 4
+  
+}
+
