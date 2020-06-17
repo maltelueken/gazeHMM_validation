@@ -6,8 +6,6 @@
 HMM_simulate <- function(n, nstates, trueresp, truetr, truein) {
   
   require(depmixS4)
-  source("algorithm/model_helper_functions.R")
-  
   
   data <- data.frame(vel = numeric(n),
                      acc = numeric(n),
