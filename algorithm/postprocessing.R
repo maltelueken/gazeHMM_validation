@@ -4,7 +4,7 @@
 # Date: 20.04.2020
 
 
-postprocess <- function(data, state, min.sac) { # data frame with dependent variables, vector with sample states, minimum saccade duration
+postprocess <- function(data, state, fr, min.sac) { # data frame with dependent variables, vector with sample states, minimum saccade duration
   
   source("algorithm/postprocessing_helper_functions.R")
   
@@ -32,6 +32,11 @@ postprocess <- function(data, state, min.sac) { # data frame with dependent vari
   number <- df$number
   
   warning(paste(sum(label != state), " samples were relabeled during postprocessing!"))
+  
+  
+  # Multiply acceleration by sampling rate
+  
+  data$acc <- data$acc * fr
   
   
   # Initialize output event metrics 

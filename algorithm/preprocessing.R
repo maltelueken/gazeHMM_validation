@@ -107,7 +107,7 @@ preprocess <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   # Remove outliers
   
   max.vel <- 1e3
-  max.acc <- 1e5
+  max.acc <- 1e2
   
   valid[valid] <- ifelse(vel[valid] > max.vel | acc[valid] > max.acc, F, valid[valid])
   

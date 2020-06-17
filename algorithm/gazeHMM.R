@@ -166,7 +166,7 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   
   # Postprocessing
   
-  post <- postprocess(prep, model.fit@posterior$state, min.sac)
+  post <- postprocess(prep, model.fit@posterior$state, fr, min.sac)
   
   
   # Output: Data frame with samples, data frames with events, fitted model
