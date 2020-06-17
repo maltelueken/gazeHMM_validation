@@ -1,0 +1,66 @@
+---
+suppress-bibliography: true
+---
+
+# Technical Details
+The algorithm is divided in three parts: Preprocessing, classification, and postprocessing.  
+
+Input: x-coordinate, y-coordinate, timestamp, unit of coordinates (px vs. deg), screen resolution, screen dimensions, distance to screen, sampling rate, blink indicator, order of SG filter, length of SG filter, number of states in the HMM, start values for the HMM, downsampling factor, random response start values, seed for random response start values, control options for fitting the HMM, minimum saccade duration.
+
+## Preprocessing
+
+(@) The algorithm checks whether samples are valid: Samples for which the x- or y-coordinates are NA, infinity, or (0,0) are marked (internally) as invalid.
+(@) Samples that match the blink indicator are labeled as blinks.
+(@) If the unit is px, the x- and y-coordinates are transformed into va with: 
+    i. The coordinates are centered ([0,0] is center)
+    ii. $\theta_{deg} = atan(\frac{x*res_x}{d_{screen}*dim_x})\frac{180}{\pi}$
+(@) Samples that are outside the screen are marked as invalid.
+(@) Velocities and accelerations for the x- and y-coordiantes are calculated using a Savitzky-Golay filter (3rd order, length = 5).
+(@) Combined velocities and accelerations are calculated as: $v = f \sqrt{v_x^2 + v_y^2}$ and $a = f \sqrt{a_x^2 + a_y^2}$ with $f$ as the sampling rate.
+(@) Velocities and accelerations of value zero are nudged to be 0.01.
+(@) Samples with velocity above 1000 deg/s or acceleration above 100000 deg/s$^2$ are marked as invalid.
+(@) The sample-to-sample angle is calculated as: 
+$$\theta_t = atan2(\frac{y_{t+1} - y_t}{x_{t+1} - x_t}) - atan2(\frac{y_t - y_{t-1}}{x_t - x_{t-1}}).$$ 
+Angles are normalized to $[0,2\pi]$ by adding $2\pi$ to negative values.
+(@) Samples that have an angle with value NA are marked as invalid.
+(@) The velocity, acceleration, and angle of invalid samples are set to NA.  
+
+Output: Data frame with x-coordinate, y-coordinate, timestamp, velocity, acceleration, angle, and initial label variable with blinks.
+
+## Classifcation
+Input: Data frame from preprocessing and HMM related general input variables.  
+
+(@) Sets default start values if none are provided. 
+(@) Downsamples velocity and acceleration.
+(@) Fits a HMM with velocity, acceleration, and angle as dependent variables.  
+Velocity and acceleration are modeled by a two-parameter gamma distribution (shape and scale). Angle is modeled by a uniform distribution for the first component and von-Mises distributions (mean and kappa) for further components. Initial state probabilities are optimized on the identity scale and transition probabilities on the multinomial logit scale. All response parameters except for the mean parameters of von-Mises distributions are optimized on the log-scale.  
+
+Output: Fitted model.
+
+## Postprocessing
+Input: Data frame from preprocessing and posterior state sequence of the fitted model.
+
+(@) Relabels posterior states of samples with recursive algorithm:
+    i. If a fixation or smooth pursuit sample has no previous or following sample with the same label (single sample event), 
+it is relabeled as the label from the previous sample.
+    ii. If a PSO sample is followed by a saccade sample or following a non-saccade sample,
+it is relabeled as the last different label.
+    iii. Saccade events (batch of consecutive saccade samples) below the minimum saccade duration (in s) are relabeled as the label from the previous event.
+    iv. These steps are applied recursively until all conditions are met.
+(@) For each event (batch of subsequent valid samples belonging to the same label), the following metrics are computed:
+    i. Fixations:
+        a. Duration: Max. timestamp - min. timestamp
+        b. Position: Trimmed mean (20%) of x- and y-coordinates
+    ii. Saccades, PSOs, and smooth pursuits:
+        a. Duration: Max. timestamp - min. timestamp
+        b. Start: First x- and y- coordinates
+        c. End: Last x- and y- coordinates
+        d. Amplitude: Euclidian distance from start to end
+        e. Max. velocity
+        f. Avg. velocity
+        g. Max. acceleration $\cdot 1000$
+        h. Avg. acceleration $\cdot 1000$
+        i. Direction: $\theta = atan2(\frac{end_y - start_y}{end_x - start_x})$
+        
+General output: List with a data frame containing the labeled samples, a list with data frames for the different events,
+and the fitted model.
