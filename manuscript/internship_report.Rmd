@@ -38,6 +38,9 @@ keywords          : "keywords"
 wordcount         : "X"
 
 bibliography      : "report.bib"
+appendix          : 
+ - "report_appendix.Rmd"
+ - "report_technical_appendix.Rmd"
 
 floatsintext      : no
 figurelist        : yes
@@ -1222,63 +1225,6 @@ bic.plot <- lapply(A2017.bic, function(x) {
 
 ```
 
-```{r calculate integrated complete likelihood criterion, include=FALSE}
-
-# Compute ICL
-
-ICL <- function(mod) {
-  
-  -2*logLik(mod, method = "classification") + npar(mod)*log(nobs(mod))
-  
-}
-
-A2017.icl <- lapply(A2017.fit, function(stim) {
-  out <- lapply(stim, function(subj) {
-    out <- lapply(1:length(subj), function(mod) {
-      
-      if(mod == 1) {
-        
-        icl <- try(-2*subj[[mod]][["LL"]] + 6*log(subj[[mod]][["N"]]))
-        
-      } else {
-        
-        icl <- try(ICL(subj[[mod]]$model))
-        
-      }
-      
-      return(ifelse(is.numeric(icl), icl, NA))
-    })
-    
-    return(schwarz.weights(unlist(out)))
-  })
-  
-  df <- as.data.frame(reduce(out, rbind))
-  
-  names(df) <- paste("model_", 1:length(stim[[1]]), sep = "")
-  
-  return(df)
-})
-
-
-# Create ICL weight plots
-
-icl.plot <- lapply(A2017.icl, function(x) {
-  
-  data.long <- x %>% 
-    mutate(subject = 1:nrow(x)) %>%
-    pivot_longer(names(x), names_to = "model", values_to = "weight") %>%
-    mutate_at(c("subject", "model"), as.factor)
-  
-  p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight)) +
-    scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
-    scale_y_discrete(name = "Subject") +
-    scale_fill_distiller(name = "ICL weight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), palette = "Spectral")
-  
-  return(p)
-})
-
-```
-
 To examine whether HMMs are accurately describing eye movements, I applied gazeHMM with one, two, three, four, and five states on two benchmark data sets and compared the Schwarz weights of the HMMs. Schwarz weights are the result of transforming a set of BIC values. They can be interpreted as the probability for a model to have generated the data it was fitted to. For the @Andersson2017 data set, I expected the highest weights for the three-state models in the image condition. For the moving dots and video conditions, I predicted the highest weights for the four-state model. Figure \@ref(fig:plot-schwarz-weights-img) shows the Schwarz weights for different subjects and models in the image condition. For all subjects, the five-state model displays the highest weight, suggesting that it hast most likely generated the data. In the moving dots condition, the five-state model has the highest weights for most subjects, but the one-, three, and four-state models exhibit the highest weights for two subjects each (see Figure \@ref(fig:plot-schwarz-weights-dots)). The video condition has the same pattern as the image condition, as the five-state model consistently has the highest weights (see Figure \@ref(fig:plot-schwarz-weights-vid)). In contrast to my hypothesis, applying different HMMs to the @Andersson2017 data suggests that the five-state model has most likely generated the data. Except for the moving dots condition, there was little variation in the Schwarz weights, indicating large differences in the model likelihoods. The model comparison for the @Ehinger2019 data set yielded similar results (see Appendix). A recent model recovery study showed that the BIC tended to prefer overly complex HMMs when they were misspecified [e.g., the conditional independence assumption was violated; @Pohle2017]. Instead, the integrated completed likelihood (ICL) criterion [@Biernacki2013] performed better in choosing the correct data generating model. Therefore, I computed the weighted ICL criterion for the HMMs fitted to the benchmark data sets. Using the ICL as the model selection criterion yielded very similar results to the BIC (see Appendix). The preference for the five-state model was even more consistent across conditions and subjects.
 
 (ref:plot-schwarz-weights-img) Schwarz weights displayed for each subject and HMMs with different numbers of states. Models were applied to the image condition of the @Andersson2017 data set. Higher weights indicate better model fit.
@@ -1850,10 +1796,6 @@ Both the simulation and validation studies showed that gazeHMM is a suitable alg
 
 *Acknowledgment*. I would like to thank my supervisors Ingmar Visser and Simon Kucharsky for their helpful advice on the development and implementation of the study.
 
-\newpage
-
-# Appendix
-# Technical Appendix
 # References
 
 \begingroup
