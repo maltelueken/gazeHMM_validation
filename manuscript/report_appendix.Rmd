@@ -1,0 +1,174 @@
+---
+suppress-bibliography: true
+---
+
+(ref:plot-sim-exp) Simulated data from the HMM with the default parameters of the simulation study. Displayed are acceleration (in deg/s$^2$, multiplied by 10000), sample-to-sample (relative) angle (in rad), and velocity (in deg/s, multiplied by 10) over time (in s). Acceleration and velocity were multiplied back to their natural scale. Note that PSOs (State 3, blue dots) do not only occur after saccades because the HMM parameters were unconstrained.
+
+```{r plot-sim-exp, results='hold', fig.cap="(ref:plot-sim-exp)"}
+
+source(here("simulation/model_simulation.R"))
+
+resp.sim.true <- list(fix = list(vel = c(3, 0.35), acc = c(3, 0.15)), 
+                     sac = list(vel = c(3, 10), acc = c(3, 3), angle = c(0, 1)),
+                     pso = list(vel = c(3, 1), acc = c(3, 3), angle = c(pi, 1)),
+                     sp = list(vel = c(3, 1), acc = c(3, 0.15), angle = c(0, 1)))
+
+tr.sim.true <- matrix(0.1/3, 4, 4)
+
+diag(tr.sim.true) <- 0.9
+
+sim.model <- simulate(HMM_simulate(n = 500, nstates = 4, trueresp = resp.sim.true, truetr = tr.sim.true,
+                          truein = rep(1/4, 4)), seed = 123)
+
+data.frame(State = as.factor(sim.model@states), Velocity = sim.model@response[[1]][[1]]@y*10,
+                           Acceleration = sim.model@response[[1]][[2]]@y*1e4, Angle = sim.model@response[[1]][[3]]@y) %>% 
+  mutate(Time = 1:500*0.002) %>%
+  pivot_longer(c("Velocity", "Acceleration", "Angle"), names_to = "Metric", values_to = "Value") %>%
+  mutate(Metric = ifelse(Metric == "Angle", "Rel. angle", Metric)) %>%
+  ggplot(aes(x = Time, y = Value)) + 
+  facet_grid(rows = vars(Metric), scales = "free_y", switch =  "y") + 
+  geom_path() + geom_point(aes(color = State), size = 0.8) + 
+  scale_y_continuous(name = "") + scale_x_continuous(name = "Time (in s)") +
+  theme(strip.placement = "outside")
+
+```
+
+```{r calculate integrated complete likelihood criterion, include=FALSE}
+
+# Compute ICL
+
+ICL <- function(mod) {
+  
+  -2*logLik(mod, method = "classification") + npar(mod)*log(nobs(mod))
+  
+}
+
+A2017.icl <- lapply(A2017.fit, function(stim) {
+  out <- lapply(stim, function(subj) {
+    out <- lapply(1:length(subj), function(mod) {
+      
+      if(mod == 1) {
+        
+        icl <- try(-2*subj[[mod]][["LL"]] + 6*log(subj[[mod]][["N"]]))
+        
+      } else {
+        
+        icl <- try(ICL(subj[[mod]]$model))
+        
+      }
+      
+      return(ifelse(is.numeric(icl), icl, NA))
+    })
+    
+    return(schwarz.weights(unlist(out)))
+  })
+  
+  df <- as.data.frame(reduce(out, rbind))
+  
+  names(df) <- paste("model_", 1:length(stim[[1]]), sep = "")
+  
+  return(df)
+})
+
+
+# Create ICL weight plots
+
+icl.plot <- lapply(A2017.icl, function(x) {
+  
+  data.long <- x %>% 
+    mutate(subject = 1:nrow(x)) %>%
+    pivot_longer(names(x), names_to = "model", values_to = "weight") %>%
+    mutate_at(c("subject", "model"), as.factor)
+  
+  p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight)) +
+    scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
+    scale_y_discrete(name = "Subject") +
+    scale_fill_distiller(name = "ICL weight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), palette = "Spectral")
+  
+  return(p)
+})
+
+```
+
+(ref:plot-icl-weights-img) ICL weights displayed for each subject and HMMs with different numbers of states. Models were applied to the image condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-icl-weights-img, results='hold', fig.cap="(ref:plot-icl-weights-img)"}
+
+print(icl.plot[[2]])
+
+```
+
+(ref:plot-icl-weights-dots) ICL weights displayed for each subject and HMMs with different numbers of states. Models were applied to the moving dots condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-icl-weights-dots, results='hold', fig.cap="(ref:plot-icl-weights-dots)"}
+
+print(icl.plot[[1]])
+
+```
+
+(ref:plot-icl-weights-vid) ICL weights displayed for each subject and HMMs with different numbers of states. Models were applied to the video condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-icl-weights-vid, results='hold', fig.cap="(ref:plot-icl-weights-vid)"}
+
+print(icl.plot[[3]])
+
+```
+
+(ref:plot-example-classification) Example data from @Andersson2017 displayed as x-, and y-coordinates, velocity (in deg/s), acceleration (in deg/s$^2$), and sample-to-sample (relative) angle (in rad). Colors indicate classification by gazeHMM and symbols by human coder MN. Note that the human coder classified all fixations from gazeHMM as smooth pursuits and delayed the separation between the saccade and PSOs.
+
+```{r plot-example-classification, results='hold', fig.cap="(ref:plot-example-classification)", fig.height=8}
+
+cbind(A2017.fit[[3]][[3]][[4]]$samples, label_MN = as.factor(A2017[[3]][[3]]$label_MN)) %>% 
+  gather(c("x", "y", "vel", "acc", "angle"), key = metric, value = value, factor_key = T) %>% 
+  mutate_at(vars(label, state), as.factor) %>%
+  dplyr::filter(t > 4.0, t <= 4.5) %>% 
+  rename(coderMN = label_MN, gazeHMM = label, Time = t) %>% 
+  mutate(metric = fct_recode(metric, "x-coordinate" = "x", "y-coordinate" = "y", "Velocity" = "vel",
+                             "Acceleration" = "acc", "Rel. angle" = "angle"),
+         coderMN = fct_recode(coderMN, "Fix" = "1", "Sacc" = "2", "PSO" = "3", "SP" = "4", "Blink" = "5", "Other" = "6"),
+         gazeHMM = fct_recode(gazeHMM, "Noise" = "0", "Fix" = "1", "Sacc" = "2", "PSO" = "3", "SP" = "4")) %>%
+  ggplot(aes(x = Time, y = value)) + 
+  facet_wrap(vars(metric), ncol = 1, scales = "free", strip.position = "left") +
+  geom_path() + xlab("Time in s") + ylab("") +
+  geom_point(aes(color = gazeHMM, shape = coderMN), size = 0.8) + 
+  theme(strip.placement = "outside",
+        axis.text = element_text(size = 8))
+
+```
+
+(ref:tab-example-trans) Transition probabability estimates for example data from @Andersson2017
+(ref:tab-example-trans-note) Rows indicate from which state and columns into which state the model transitions.
+
+```{r tab-example-trans, results='hold'}
+
+tab.exp.tr <- matrix(round(backtrans(getpars(A2017.fit[[3]][[3]][[4]]$model))[5:20], 2), 4, 4, byrow = T)
+
+apa_table(tab.exp.tr,
+          col.names = as.character(1:4),
+          col_spanners = list("To state" = c(1,4)),
+          row.names = TRUE,
+          added_stub_head = "From\nstate",
+          caption = "(ref:tab-example-trans)",
+          note = "(ref:tab-example-trans-note)")
+
+```
+
+(ref:tab-example-resp) Response parameter estimates for example data from @Andersson2017
+(ref:tab-example-resp-note) Con = concentration parameter of the von-Mises distribution.
+
+```{r tab-example-resp, results='hold'}
+
+tab.exp.resp <- matrix(round(backtrans(getpars(A2017.fit[[3]][[3]][[4]]$model))[21:44], 2), 4, 6, byrow = T)
+
+tab.exp.resp[1, c(5,6)] <- NA
+
+apa_table(tab.exp.resp,
+          col.names = c("Shape (vel)", "Scale (vel)", "Shape (acc)", "Scale (acc)", "Mean", "Con"),
+          row.names = TRUE,
+          format.args = list(na_string = "-"),
+          added_stub_head = "State",
+          caption = "(ref:tab-example-resp)",
+          note = "(ref:tab-example-resp-note)")
+
+```
+
