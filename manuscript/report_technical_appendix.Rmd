@@ -11,7 +11,7 @@ Input: x-coordinate, y-coordinate, timestamp, unit of coordinates (px vs. deg), 
 
 (@) The algorithm checks whether samples are valid: Samples for which the x- or y-coordinates are NA, infinity, or (0,0) are marked (internally) as invalid.
 (@) Samples that match the blink indicator are labeled as blinks.
-(@) All samples within +/- *blinkwindow* around blink indicated samples are marked as invalid and labeled as blinks.
+(@) All samples within +/- *blink window* around blink indicated samples are marked as invalid and labeled as blinks.
 (@) If the unit is px, the x- and y-coordinates are transformed into va with: 
     i. The coordinates are centered ([0,0] is center)
     ii. $\theta_{deg} = atan(\frac{x \cdot res_x}{d_{screen} \cdot dim_x})\frac{180}{\pi}$

@@ -1,7 +1,3 @@
----
-suppress-bibliography: true
----
-
 # Additional Figures and Tables
 
 (ref:plot-sim-ex) Simulated data from the HMM with the default parameters of the simulation study. Displayed are acceleration (in deg/s$^2$, multiplied by 10000), sample-to-sample (relative) angle (in rad), and velocity (in deg/s, multiplied by 10) over time (in s). Acceleration and velocity were multiplied back to their natural scale. Note that PSOs (State 3, blue dots) do not only occur after saccades because the HMM parameters were unconstrained.
@@ -227,13 +223,11 @@ cbind(A2017.fit[[3]][[3]][[4]]$samples, label_MN = as.factor(A2017[[3]][[3]]$lab
 
 ```{r tab-example-trans}
 
-tab.exp.tr <- matrix(round(backtrans(getpars(A2017.fit[[3]][[3]][[4]]$model))[5:20], 2), 4, 4, byrow = T)
+tab.exp.tr <- cbind(1:4, matrix(round(backtrans(getpars(A2017.fit[[3]][[3]][[4]]$model))[5:20], 2), 4, 4, byrow = T))
 
 apa_table(tab.exp.tr,
-          col.names = as.character(1:4),
-          col_spanners = list("To state" = c(1,4)),
-          row.names = TRUE,
-          added_stub_head = "From\nstate",
+          col.names = c("From\nstate", as.character(1:4)),
+          col_spanners = list("To state" = c(2,5)),
           caption = "(ref:tab-example-trans)",
           note = "(ref:tab-example-trans-note)")
 
@@ -244,15 +238,13 @@ apa_table(tab.exp.tr,
 
 ```{r tab-example-resp}
 
-tab.exp.resp <- matrix(round(backtrans(getpars(A2017.fit[[3]][[3]][[4]]$model))[21:44], 2), 4, 6, byrow = T)
+tab.exp.resp <- cbind(1:4, matrix(round(backtrans(getpars(A2017.fit[[3]][[3]][[4]]$model))[21:44], 2), 4, 6, byrow = T))
 
 tab.exp.resp[1, c(5,6)] <- NA
 
 apa_table(tab.exp.resp,
-          col.names = c("Shape (vel)", "Scale (vel)", "Shape (acc)", "Scale (acc)", "Mean", "Con"),
-          row.names = TRUE,
+          col.names = c("State", "Shape (vel)", "Scale (vel)", "Shape (acc)", "Scale (acc)", "Mean", "Con"),
           format.args = list(na_string = "-"),
-          added_stub_head = "State",
           caption = "(ref:tab-example-resp)",
           note = "(ref:tab-example-resp-note)")
 
