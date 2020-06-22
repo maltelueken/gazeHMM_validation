@@ -4,7 +4,7 @@
 # Date: 07.04.2020
 
 
-preprocess <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
+preprocess <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL, b.win = 0.05,
                        sg.order, sg.length) {
   
   require(signal)
@@ -97,8 +97,8 @@ preprocess <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   for(i in 1:length(inib)) {
     if(!is.na(inib[i])) {
       
-      valid[t > (t[i]-0.05) & t <= (t[i]+0.05)] <- F
-      label[t > (t[i]-0.05) & t <= (t[i]+0.05)] <- 0
+      valid[t > (t[i]-b.win) & t <= (t[i]+b.win)] <- F
+      label[t > (t[i]-b.win) & t <= (t[i]+b.win)] <- 0
       
     }  
   }

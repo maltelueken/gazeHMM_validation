@@ -4,7 +4,7 @@
 # Date: 24.04.2020
 
 
-gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
+gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL, b.win,
                     sg.order = 3, sg.length = 5, 
                     nstates, respstart, trstart, instart, sf = c(10, 10), 
                     random.respstart = T, start.seed = NULL,
@@ -102,6 +102,8 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
        "'blink' must be either a numeric vector of length 2 or a logical vector with the same length as 't'"
        )
   
+  if(!(is.numeric(b.win) && length(b.win) == 1 && b.win >= 0)) stop("'b.win' must be a single non-negative value")
+  
   if(!is.integer(nstates)) stop("'nstates must be integer'")
   if(length(nstates) != 1) stop("'nstates' must be a single value")
   if(nstates < 2 || nstates > 5) stop("'nstates' must have a value between 2 and 5")
@@ -156,7 +158,7 @@ gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL,
   
   # Preprocessing
   
-  prep <- preprocess(x, y, t, unit, res, dim, dist, fr, blink, sg.order, sg.length)
+  prep <- preprocess(x, y, t, unit, res, dim, dist, fr, blink, b.win, sg.order, sg.length)
   
   
   # Model classification
