@@ -218,7 +218,7 @@ cbind(A2017.fit[[3]][[3]][[4]]$samples, label_MN = as.factor(A2017[[3]][[3]]$lab
 
 ```
 
-(ref:tab-example-trans) Transition probabability estimates for example data from Andersson et al. (2017)
+(ref:tab-example-trans) Transition Probabability Estimates for Example Data from Andersson et al. (2017)
 
 ```{r tab-example-trans}
 
@@ -231,7 +231,7 @@ apa_table(tab.exp.tr,
 
 ```
 
-(ref:tab-example-resp) Response parameter estimates for example data from Andersson et al. (2017)
+(ref:tab-example-resp) Response Parameter Estimates for Example Data from Andersson et al. (2017)
 
 ```{r tab-example-resp}
 
