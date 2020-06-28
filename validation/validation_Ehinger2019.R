@@ -48,23 +48,16 @@ onestate_HMM <- function(data, respstart, sf = c(10, 10)) {
 
 # Load Eyelink data
 
-dir <- "~/Uni/Psychologie Master/Internship/Data/Test data/Ehinger et al. (2019)/"
-
-
 # # Convert .EDF files into .asc files
 # 
-# setwd("~/Uni/Psychologie Master/Internship/Data/Test data/Ehinger et al. (2019)/")
-# 
-# Sys.getenv("C:/Programme (x86)/SR Research/EyeLink/EDF_Access_API/Example", names = T)
-# 
-# edf.filenames <- list.files(path = getwd(), pattern = ".EDF")
+# edf.filenames <- list.files(path = here("validation/data"), pattern = ".EDF")
 # 
 # converted <- edf2asc(edf.filenames)
 
   
-filenames.el <- list.files(path = dir, pattern = ".asc")
+filenames.el <- list.files(path = here("validation/data"), pattern = ".asc")
   
-E2019 <- lapply(paste(dir, "/", filenames.el, sep = ""), function(x) { 
+E2019 <- lapply(paste(here("validation/data"), "/", filenames.el, sep = ""), function(x) { 
   
   data <- read.asc(x) 
   
@@ -127,16 +120,4 @@ E2019.fit <- parLapply(clust, E2019, function(subj) lapply(subj, function(task) 
 
 stopCluster(clust)
 
-save("E2019.fit", file = "validation/Ehinger2019_fitted.Rdata")
-
-
-# Compare models with different states
-
-schwarz.weights <- function(bic, na.rm = T) {
-  
-  d.bic <- bic - min(bic, na.rm = na.rm) # eq 2
-  
-  exp(-0.5 * d.bic)/sum(exp(-0.5 * d.bic), na.rm = na.rm) # eq 4
-  
-}
-
+save("E2019.fit", file = here("validation/Ehinger2019_fitted.Rdata"))
