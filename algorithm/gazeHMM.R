@@ -4,7 +4,7 @@
 # Date: 24.04.2020
 
 
-gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL, b.win,
+gazeHMM <- function(x, y, t, unit = "px", res, dim, dist, fr, blink = NULL, b.win = 0.05,
                     sg.order = 3, sg.length = 5, 
                     nstates, respstart, trstart, instart, sf = c(10, 10), 
                     random.respstart = T, start.seed = NULL,
