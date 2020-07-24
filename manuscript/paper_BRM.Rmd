@@ -1044,7 +1044,7 @@ A2017.bic <- lapply(A2017.fit, function(stim) {
   df$subject <- 1:nrow(df)
   
   return(df)
-}) %>% reduce(rbind) %>% mutate(condition = rep(c("Moving dots", "Image", "Video"), c(11, 14, 9)))
+}) %>% reduce(rbind) %>% mutate(condition = rep(c("Moving dots", "Image", "Video"), c(9, 14, 9)))
 
 
 # Create Schwarz weight plots
@@ -1081,7 +1081,7 @@ fr <- 500
 
 alg.names <- names(A2017[[1]][[1]])[-c(1:5)]
 
-alg.names <- c(alg.names[1:2], "gazeHMM-3", "gazeHMM-4", alg.names[3:length(alg.names)])
+alg.names <- c(alg.names[1:2], "gazeHMM-3", "gazeHMM-4", alg.names[3:length(alg.names)])[-7]
 
 A2017.events <- lapply(1:4, function(e) {
   lapply(1:length(A2017), function(stim) {
@@ -1132,7 +1132,7 @@ A2017.events <- lapply(1:4, function(e) {
         }) %>% reduce(append)
       }
       
-      return(data.frame(mean(dur, na.rm = T), sd(dur, na.rm = T), length(dur)))
+      return(data.frame(mean(dur, na.rm = T)*1e3, sd(dur, na.rm = T)*1e3, length(dur)))
     }) %>% reduce(rbind)
   })
 })
@@ -1154,63 +1154,26 @@ A2017.rmsd <- lapply(A2017.events, function(event) {
     return(as.data.frame(cbind(stim, rmsd = c(rmsd.cod, rmsd.cod, rmsd.alg))))
   }) %>% reduce(cbind)
   
-  out <- cbind(alg.names, rmsd, stringsAsFactors = FALSE)[-7,]
+  out <- cbind(alg.names, rmsd, stringsAsFactors = FALSE)
   
   names(out) <- c("Algorithm", rep(c("moving_dots", "image", "video"), each = 4))
   
   out[3, -c(1,6:9)] <- NA
   out[4, 6:9] <- NA
   
+  out[out == 0] <- NA
+  
   return(out[,order(names(out))])
 })
-
-
-# A2017.rmsd <- lapply(2:4, function(k) {
-#   lapply(1:length(A2017.fit), function(x) { 
-#     out <- lapply(1:k, function(y) {
-#       out <- lapply(A2017.fit[[x]], function(z) {
-#         
-#         if(class(z[[k]]) == "gazeHMM") z[[k]]$events[[y]]
-#         
-#       })
-#       
-#       df <- try(reduce(out, rbind))
-#       
-#       alg <- try(c(mean(df$dur, na.rm = T), sd(df$dur, na.rm = T), nrow(df)))
-#       
-#       if(y == 4) {
-#         M <- try(cbind(A2017.events[[x]][[y]], alg))
-#       } else {
-#         M <- try(cbind(A2017.events[[x]][[y]], alg, as.data.frame(ref[[x]][[y]])))
-#         M[1:2,4:ncol(M)] <- M[1:2,4:ncol(M)]/1e3
-#       }
-#       
-#       M.norm <- try(apply(M, 1, function(x) {(x - min(x, na.rm = T))/(max(x, na.rm = T) - min(x, na.rm = T))}))
-#       
-#       if(y == 4) {
-#         rmsd <- try(sum(sqrt((M.norm[3,] - colSums(M.norm[1:2,]/2))^2)))
-#       } else {
-#         rmsd <- try(apply(M.norm[3:nrow(M.norm),], 1, function(r) {sum(sqrt((r - colSums(M.norm[1:2,]/2))^2))}))
-#       }
-#       
-#       coder <- try(sum(sqrt((M.norm[1,] - M.norm[2,])^2)))
-#       
-#       rmsd <- c(coder, coder, rmsd)
-#       
-#       return(rbind(M, rmsd))
-#     })
-#   })
-# })
-
 
 ```
 
 ```{r calculate Cohen s kappa and confusion matrices, include= FALSE}
 
-# Compute Cohen's kappa and confusion matrices
+# Compute Cohen's kappa
 
-A2017.kappa <- cbind(alg.names, lapply(1:4, function(event) {
-  lapply(1:length(A2017), function(stim) {
+A2017.kappa <- cbind.data.frame(alg.names, lapply(1:4, function(event) {
+  out <- lapply(1:length(A2017), function(stim) {
     
     gazeHMM.3 <- lapply(A2017.fit[[stim]], function(subj) {
       
@@ -1224,7 +1187,7 @@ A2017.kappa <- cbind(alg.names, lapply(1:4, function(event) {
       
     }) %>% reduce(append)
     
-    df <- cbind(reduce(A2017[[stim]], rbind)[,c(6,7)], gazeHMM.3, gazeHMM.4, reduce(A2017[[stim]], rbind)[,c(8:18)])
+    df <- cbind(reduce(A2017[[stim]], rbind)[,c(6,7)], gazeHMM.3, gazeHMM.4, reduce(A2017[[stim]], rbind)[,c(8:18)])[-7]
     
     kappa.alg <- sapply(names(df)[-c(1,2)], function(alg) {
 
@@ -1250,164 +1213,14 @@ A2017.kappa <- cbind(alg.names, lapply(1:4, function(event) {
     
     return(c(kappa.cod, kappa.alg))
   }) %>% reduce(cbind)
-}) %>% reduce(cbind))
-
-# A2017.acc <- lapply(2:4, function(k) {
-#   lapply(1:length(A2017.fit), function(x) { 
-#     out <- lapply(1:length(A2017.fit[[x]]), function(y) {
-#       
-#       if(class(A2017.fit[[x]][[y]][[as.character(k)]]) == "gazeHMM") {
-#         cod.MN <- as.data.frame(cbind(A2017.fit[[x]][[y]][[as.character(k)]]$samples$label, A2017[[x]][[y]]$label_MN))
-#         cod.RA <- as.data.frame(cbind(A2017.fit[[x]][[y]][[as.character(k)]]$samples$label, A2017[[x]][[y]]$label_RA))
-#         
-#         return(rbind(cod.MN, cod.RA))
-#       }
-#     })
-#     
-#     df <- reduce(out, rbind)
-#     
-#     df[df[,1] == 0,1] <- 5
-#     
-#     events <- lapply(1:k, function(e) {
-#       
-#       alg <- df[,1] == e
-#       cod <- df[,2] == e
-#       
-#       mat <- matrix(c(sum(alg & cod, na.rm = T), sum(alg & !cod, na.rm = T), 
-#                       sum(!alg & cod, na.rm = T), sum(!alg & !cod, na.rm = T)), 2, 2)
-#       
-#       over <- mat[2,1]/sum(mat[,1])
-#       under <- mat[1,2]/sum(mat[,2])
-#       
-#       return(list(kappa = cohen.kappa(mat)$kappa, 
-#                   over = over,
-#                   under = under))
-#     })
-#     
-#     ratio <- mean(df[,1] != df[,2], na.rm = T)
-#     
-#     conmat <- table(df[,1], df[,2])
-#     
-#     return(list(events = events, ratio =  ratio, conmat = conmat))
-#   })
-# })
-
-
-# Compute Cohen's kappa between human coders
-
-# stimuliTypes <- c("dots", "img", "video")
-# 
-# kappaMat <- list()
-# 
-# for(i in 1:6) {
-#   
-#   kappaMat[[i]] = matrix(0, 2, 3)
-#   
-#   for(j in 1:length(stimuliTypes)) {
-#     
-#     events2 <- A2017[[stimuliTypes[j]]]
-#     
-#     numTot <- 0
-#     
-#     for (q in 1:length(events2)) {
-#       
-#       numTot <- numTot + nrow(events2[[q]])
-#       
-#     }
-#    
-#     event_vector <- matrix(0, numTot, 2)
-#     
-#     idx_start <- 1
-#     idx_stop <- 0
-#     
-#     for (q in 1:length(events2)) {
-#       
-#       idx_stop <- idx_start -1 + nrow(events2[[q]])
-#       
-#       for (r in 1:2) {
-#        
-#         event_vector[idx_start:idx_stop,r] <- events2[[q]][,r+5]
-#          
-#       }
-#       
-#       idx_start <- idx_start + nrow(events2[[q]])
-#     }
-#     
-#     event_vector <- rbind(event_vector, event_vector)
-#     comp_vector <- matrix(0, nrow(event_vector), ncol(event_vector))
-#     
-#     for (z in 1:2) {
-#       
-#       idx_start <- ((z-1) * nrow(event_vector)/2) + 1
-#       idx_stop <- z*(nrow(event_vector)/2)
-#       
-#       comp_vector[idx_start:idx_stop,1] <- event_vector[idx_start:idx_stop, z]
-#       
-#     }
-#     
-#     for (k in 1:length(events2)) {
-#       
-#       evMat <- event_vector == i
-#       cpMat <- event_vector == i
-#       
-#       X <- matrix(0, 2, 2)
-#       
-#       for (l in 1:2) {
-#        
-#         X[1,1] <- sum(evMat[,1] & cpMat[,1])
-#         X[1,2] <- sum(evMat[,1] & !cpMat[,1])
-#         X[2,1] <- sum(!evMat[,1] & cpMat[,1])
-#         X[2,2] <- sum(!evMat[,1] & !cpMat[,1])
-#         
-#         kappaMat[[i]][l,j] <- cohen.kappa(X)$kappa
-#       }
-#     }
-#   }
-# }
-
-A2017.cod.acc <- lapply(A2017, function(x) {
-  df <- lapply(x, function(y) {
-    
-    return(y[,6:7])
-  }) %>% reduce(rbind)
   
-  df <- df %>% dplyr::filter(label_MN < 4 & label_RA < 4)
+  return(cbind(out[,2], out[,1], out[,3]))
+}) %>% reduce(cbind), stringsAsFactors = F)
 
-  events <- lapply(1:3, function(e) {
-    
-    # df <- df %>% dplyr::filter(label_MN == e | label_RA == e)
-    
-    MN <- df[,1] == e
-    RA <- df[,2] == e
 
-    mat <- matrix(c(sum(MN & RA, na.rm = T), sum(MN & !RA, na.rm = T),
-                    sum(!MN & RA, na.rm = T), sum(!MN & !RA, na.rm = T)), 2, 2)
+# Compute disagreement
 
-    return(cohen.kappa(mat)$kappa)
-  })
-})
-
-table(A2017.cod.acc$dots[[1]])
-
-# Create tables for Cohen's kappa and confusion matrices
-
-# kappa.table <- lapply(A2017.acc, function(x) {
-#   out <- lapply(x, function(y){
-#     out <- lapply(y$events, function(z){
-#       return(round(z$kappa, 3))
-#     })
-#     
-#     return(reduce(out, cbind))
-#   })
-#   
-#   tabmat <- reduce(out, rbind)
-#   
-#   tabmat <- rbind(tabmat[2,], tabmat[1,], tabmat[3,])
-#   
-#   return(as.vector(tabmat))
-# })
-
-A2017.conf <- cbind.data.frame(alg.names, lapply(1:length(A2017), function(stim) {
+A2017.disag <- cbind.data.frame(alg.names, lapply(1:length(A2017), function(stim) {
   
   gazeHMM.3 <- lapply(A2017.fit[[stim]], function(subj) {
     
@@ -1421,9 +1234,9 @@ A2017.conf <- cbind.data.frame(alg.names, lapply(1:length(A2017), function(stim)
     
   }) %>% reduce(append)
   
-  df <- cbind(reduce(A2017[[stim]], rbind)[,c(6,7)], gazeHMM.3, gazeHMM.4, reduce(A2017[[stim]], rbind)[,c(8:18)])
+  df <- cbind(reduce(A2017[[stim]], rbind)[,c(6,7)], gazeHMM.3, gazeHMM.4, reduce(A2017[[stim]], rbind)[,c(8:18)])[-7]
   
-  conf.alg <- sapply(names(df)[-c(1,2)], function(alg) {
+  disag.alg <- sapply(names(df)[-c(1,2)], function(alg) {
     
     if(alg == "gazeHMM.3" || alg == "gazeHMM.4") {df[[alg]][df[[alg]] == 0] <- 5}
     
@@ -1433,7 +1246,7 @@ A2017.conf <- cbind.data.frame(alg.names, lapply(1:length(A2017), function(stim)
     return(mean(alg != cod)*100)
   })
   
-  conf.cod <- sapply(1:2, function(cod) {
+  disag.cod <- sapply(1:2, function(cod) {
     
     cod1 <- df[[cod]]
     cod2 <- df[,c(1,2)][-cod]
@@ -1441,15 +1254,15 @@ A2017.conf <- cbind.data.frame(alg.names, lapply(1:length(A2017), function(stim)
     return(mean(cod1 != cod2)*100)
   })
   
-  return(c(conf.cod, conf.alg))
-}) %>% reduce(cbind))
+  return(c(disag.cod, disag.alg))
+}) %>% reduce(cbind), stringsAsFactors = F)
 
 
 # Create figure for disagreement ratio
 
-names(A2017.conf) <- c("Algorithm", "Dots", "Image", "Video")
+names(A2017.disag) <- c("Algorithm", "Dots", "Image", "Video")
 
-disag.df <- A2017.conf %>% pivot_longer(names(A2017.conf)[2:4], names_to = "Condition", values_to = "Ratio")
+disag.df <- A2017.disag %>% pivot_longer(names(A2017.disag)[2:4], names_to = "Condition", values_to = "Ratio")
 
 disag.df$Algorithm <- factor(disag.df$Algorithm, levels = unique(disag.df$Algorithm))
 
@@ -1460,6 +1273,63 @@ disag.plot <- ggplot(disag.df, aes(x = Algorithm, y = Ratio, fill = Condition)) 
   geom_col(position = "dodge") + 
   scale_y_continuous(name = "Disagreement (in %)", limits = c(0, 100), breaks = c(0, 0.25, 0.5, 0.75, 1)*100) +
   scale_x_discrete(name = "") + coord_flip()
+
+
+# Compute confusion matrix
+
+A2017.conf <- as.data.frame(lapply(1:length(A2017), function(stim) {
+  
+  gazeHMM.3 <- lapply(A2017.fit[[stim]], function(subj) {
+    
+    subj[[3]]$samples$label
+    
+  }) %>% reduce(append)
+  
+  gazeHMM.4 <- lapply(A2017.fit[[stim]], function(subj) {
+    
+    subj[[4]]$samples$label
+    
+  }) %>% reduce(append)
+  
+  df <- reduce(A2017[[stim]], rbind)[,c(6,7)]
+  
+  cod <- c(df[,1], df[,2])
+  
+  conf.tab <- matrix(0, 6, 5)
+  
+  if(stim == 2) {
+    
+    alg <- rep(gazeHMM.3, 2)
+    
+    alg[alg == 0] <- 5
+    
+    conf.tab[,c(1:3, 5)] <- table(cod, alg)/rowSums(table(cod, alg))
+    
+  } else if(stim == 1) {
+    
+    alg <- rep(gazeHMM.4, 2)
+    
+    alg[alg == 0] <- 5
+    
+    conf.tab[c(1:4,6),] <- table(cod, alg)/rowSums(table(cod, alg))
+    
+  } else {
+    
+    alg <- rep(gazeHMM.4, 2)
+    
+    alg[alg == 0] <- 5
+    
+    conf.tab <- table(cod, alg)/rowSums(table(cod, alg))
+    
+  }
+  
+  return(t(conf.tab))
+}) %>% reduce(rbind))  %>% cbind(Event = rep(c("Fixations", "Saccades", "PSOs", "Pursuits", "Blinks"), 3),
+                                 Condition = rep(c("Moving dots", "Image", "Video"), each = 5), .) %>%
+  arrange(Condition) %>%
+  dplyr::select(-Condition)
+
+names(A2017.conf) <- c("Event", "Fixation", "Saccade", "PSO", "Pursuit", "Blink", "Other")
 
 ```
 
@@ -1474,7 +1344,7 @@ apa_table(A2017.rmsd[[1]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-", drop0trailing = T),
+          format.args = list(na_string = "-"),
           caption = "(ref:tab-rmsd-4-fix)",
           note = "(ref:tab-rmsd-4-fix-note)")
 
@@ -1489,7 +1359,7 @@ apa_table(A2017.rmsd[[2]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-", drop0trailing = T),
+          format.args = list(na_string = "-"),
           caption = "(ref:tab-rmsd-4-sac)",
           note = "(ref:tab-rmsd-4-sac-note)")
 
@@ -1504,7 +1374,7 @@ apa_table(A2017.rmsd[[3]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-", drop0trailing = T),
+          format.args = list(na_string = "-"),
           caption = "(ref:tab-rmsd-4-pso)",
           note = "(ref:tab-rmsd-4-pso-note)")
 
@@ -1519,7 +1389,7 @@ apa_table(A2017.rmsd[[4]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-", drop0trailing = T),
+          format.args = list(na_string = "-"),
           caption = "(ref:tab-rmsd-4-sp)",
           note = "(ref:tab-rmsd-4-sp-note)")
 
@@ -1539,15 +1409,14 @@ In sum, gazeHMM revealed a relatively high sample-to-sample agreement to human c
 
 ```{r tab-kappa-4}
 
-tab.kappa.4 <- cbind(c("coderMN", "coderRA", "gazeHMM-3", "gazeHMM-4", "CDT", "EM", "IDT", "IKF", "IMST", "IHMM", "IVT", "NH", "BIT", "LNS"),
-                     as.data.frame(rbind(ref.acc[1:2,], c(kappa.table[[2]], NA, NA, NA), kappa.table[[3]], ref.acc[3:nrow(ref.acc),]))) 
+A2017.kappa[3, -c(1, seq(2, 13, 3))] <- 0
+A2017.kappa[4, seq(2, 13, 3)] <- 0
 
-tab.kappa.4[4, c(2, 5, 8, 11)] <- NA
-tab.kappa.4[3, -c(1, 2, 5, 8, 11)] <- NA
+names(A2017.kappa) <- c("Algorithm", rep(c("Image", "Dots", "Video"), 4))
 
-apa_table(tab.kappa.4,
-          col.names = c("Algorithm", rep(c("Image", "Dots", "Video"), 4)),
-          col_spanners = list("Fixations" = c(2, 4), "Saccades" = c(5, 7), "PSOs" = c(8, 10), "Smooth pursuit" = c(11, 13)),
+apa_table(A2017.kappa,
+          col_spanners = list("Fixations" = c(2, 4), "Saccades" = c(5, 7), "PSOs" = c(8, 10), "Smooth pursuits" = c(11, 13)),
+          row.names = FALSE,
           font_size = "tiny",
           format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-kappa-4)",
@@ -1573,13 +1442,9 @@ print(disag.plot)
 
 ```{r tab-conf-4}
 
-tab.conf.4 <- cbind(Event = rep(c("Fixations", "Saccades", "PSOs", "Pursuits", "Blinks"), 3), reduce(conf.table[[3]], rbind)) %>%
-  mutate(Condition = rep(c("Moving dots", "Image", "Video"), each = 5)) %>%
-  arrange(Condition) %>%
-  dplyr::select(-Condition)
-
-apa_table(tab.conf.4,
+apa_table(A2017.conf,
           stub_indents = list("Image" = c(1:5), "Moving dots" = c(6:10), "Video" = c(11:15)),
+          row.names = FALSE,
           midrules = c(6, 12),
           caption = "(ref:tab-conf-4)",
           note = "(ref:tab-conf-4-note)")
@@ -1588,29 +1453,6 @@ apa_table(tab.conf.4,
 
 Contrary to my second hypothesis, applying gazeHMM to a benchmark data set revealed that it did not outperform all other algorithms in terms of RMSD and sample-to-sample agreement. The two criteria rather indicated a moderate performance of gazeHMM. However, the overall disagreement was lower for gazeHMM than for all other algorithms in the dynamic conditions but the highest in the static image condition.  
 Looking at the confusion matrix in Table \@ref(tab:tab-conf-4), it can be seen that gazeHMM confused fixations and smooth pursuit to a large extend. In the static image condition, it overclassified smooth pursuit events, while they were underclassified in the dynamic conditions.
-
-### gazeHMM With Three States
-Even though it was not confirmed by the model comparison, applying gazeHMM with three states to static data seems theoretically more appropriate. Including only three states could prevent gazeHMM from overclassifying smooth pursuits in the image data and yield better validation results. Therefore, I decided to apply gazeHMM with three states to the image data and explore the comparison to other algorithms.  
-Table \@ref(tab:tab-rmsd-3) shows the RMSD between gazeHMM and human coders only for the image condition. For fixations, gazeHMM shows a comparably low RMSD, but it was relatively high for saccades and PSOs. 
-The sample-to-sample agreement between gazeHMM with three states and the human coders measured by Cohen's kappa is displayed in Table \@ref(tab:tab-kappa-3) (only for the image condition). For fixations, the absolute kappa indicated substantial agreement and was relatively high compared to the other algorithms. The absolute kappa for saccades corresponded to moderate agreement. Compared to the other algorithms, it was rather low. For PSOs, the absolute agreement was fair, but relatively low compared to the other algorithms.  
-Figure \@ref(fig:plot-disag) illustrates the overall disagreement between gazeHMM with three events and the human coders compared to the other algorithms. In all three conditions, the disagreement was slightly lower for gazeHMM than for all the other algorithms (5-10% for images and moving dots, around 20% for videos). Compared to gazeHMM with four states, the RMSD for fixations decreased while the sample-to-sample agreement increased. For saccades and PSOs, the opposite pattern was found. The overall disagreement substantially decreased. Overall, applying gazeHMM with three states to static data seems more appropriate, since the increase in fixation classification outweighs the decrease in classification of saccades and PSOs. There was support for my second hypothesis since gazeHMM had lower overall disagreement to human coders, ranging between 5 and 20% across conditions, than all other algorithms.
-
-(ref:tab-kappa-3) Cohen's Kappa Between Human Coders and Algorithms for Different Events in the Image Condition
-(ref:tab-kappa-3-note) Negative values were set to zero. gazeHMM-3 classified three and gazeHMM-4 classified four events. Table adapted from @Andersson2017.
-
-```{r tab-kappa-3}
-
-tab.kappa.3 <- cbind(c("coderMN", "coderRA", "gazeHMM-4", "gazeHMM-3", "CDT", "EM", "IDT", "IKF", "IMST", "IHMM", "IVT", "NH", "BIT", "LNS"),
-                     as.data.frame(rbind(ref.acc[1:2, 1:9], kappa.table[[3]][1:9], kappa.table[[2]], ref.acc[3:nrow(ref.acc), 1:9]))) %>%
-  dplyr::select(c(1, seq(2, 10, 3)))
-
-apa_table(tab.kappa.3,
-          col.names = c("Algorithm", "Fixations", "Saccades", "PSOs"),
-          format.args = list(na_string = "-", drop0trailing = T),
-          caption = "(ref:tab-kappa-3)",
-          note = "(ref:tab-kappa-3-note)")
-
-```
 
 \newpage
 
