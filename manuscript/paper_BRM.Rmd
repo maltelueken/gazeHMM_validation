@@ -48,17 +48,10 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = 
 library(papaja)
 library(tidyverse)
 library(signal)
-library(flexcircmix)
 library(CircStats)
 library(depmixS4)
 library(psych)
 library(here)
-library(grid)
-library(gridExtra)
-library(DiagrammeR)
-library(DiagrammeRsvg)
-library(magrittr)
-library(rsvg)
 source(here("algorithm/preprocessing_helper_functions.R"))
 source(here("algorithm/model_helper_functions.R"))
 
@@ -987,13 +980,13 @@ apa_table(as.data.frame(tab.start),
 ```
 
 ## Data Sets
-We chose two data sets for validation: One was published in a study by @Andersson2017 and has been widely used for validation purposes [e.g., @Pekkanen2017]. It contains eye-tracking data from three conditions: A static condition, where subjects had to look freely at images, and two dynamic conditions, where they had to follow a constantly moving dot or objects in a video. The data was sampled with 500 Hz and two human coders (MN and RA) labeled them as belonging to six different eye movement events: Fixation, saccade, PSO, smooth pursuit, blink, or other. @Andersson2017 used the data to compare 10 different classification algorithms. We used their results to compare these 10 algorithms and the two human coders with gazeHMM.  
+We chose two data sets for validation: One was published in a study by @Andersson2017 and has been widely used for validation purposes [e.g., @Pekkanen2017]. It contains eye-tracking data from three conditions: A static condition, where subjects had to look freely at images, and two dynamic conditions, where they had to follow a constantly moving dot or objects in a video. The data was sampled with 500 Hz and two human coders (MN and RA) labeled them as belonging to six different eye movement events: Fixation, saccade, PSO, smooth pursuit, blink, or other. @Andersson2017 used the data to compare 10 different classification algorithms. We used their results to compare these 10 algorithms and the two human coders with gazeHMM. We used the original data from the study but removed two recordings from the moving dots condition because they contained majorly samples labeled as "other" or blinks. Moreover, the recordings could not be matched to the results obtained by @Andersson2017.
 The second data set was published in @Ehinger2019 and has to our knowledge not yet been used for validation. Here, we only use tasks four and five out of 10 tasks because these are qualitatively different to the first data set. In task four, subjects were instructed to fixate a central target for 20 s. Task 5 was set up similarly, but subjects had to blink when they heared one out of seven beeps (with a beep duration of 100 ms and 1.5 s intervals in between). Eye movements were recorded with 250-500 Hz. For simplicity, we only used data obtained by the EyeLink (SR Research Ltd., Ontario, Canada) eye-tracker.
 
 ## Data Analysis
 A successful validation of gazeHMM was determined by using two approaches: First, we applied gazeHMM with generative models containing 1-5 states to both data sets. The fits of the generative models were compared using Schwarz weights [@Wagenmakers2004], a weighted version of the BIC. They can be interpreted as the probability of a model having generated the data compared to the competing models. For the static condition in the @Andersson2017 data set, we expected the generative model with three states (fixation, saccade, and PSO), and for the dynamic conditions the model with four states (incl. smooth pursuit) to display the highest Schwarz weight. Regarding the @Ehinger2019 data set, we assumed that the one-state model (only fixation) would show the highest weights for both tasks.    
 The algorithm was applied separately to every subject, condition, or task. For the @Andersson2017 data set, all generative models were successfully fitted, whereas for the @Ehinger2019 data set, it was only 780 out of 900 models (87%, 60 models per task).  
-Second, we compared gazeHMM to other algorithms and human coders. We applied our algorithm with a three-state generative model to the static condition in the @Andersson2017 data set, and with a four-state model to the dynamic conditions. For comparison criteria, we followed @Andersson2017: We calculated the RMSD of event durations and counts between all algorithms and the two human coders. Cohen's kappa was calculated for each event as the binary agreement between gazeHMM and the human coders. Lastly, the overall disagreement indicated which samples were classified differently by gazeHMM across all events.
+Second, we compared gazeHMM to other algorithms and human coders. We applied our algorithm with a three-state generative model to the static condition in the @Andersson2017 data set, and with a four-state model to the dynamic conditions. For comparison criteria, we followed @Andersson2017: We calculated the RMSD of event durations and counts between all algorithms and the average of the two human coders. Our results differ slightly from the original study because we excluded two recordings (leading to less events) and calculated the event durations as $Dur_{e} = max(\mathbf{t}_{e})-max(\mathbf{t}_{e-1})$, where $\mathbf{t_{e}}$ is the vector of sample time stamps for the event *e*. Cohen's kappa was calculated for each event as the binary agreement between gazeHMM and the average of the human coders. Lastly, the overall disagreement indicated which samples were classified differently by gazeHMM compared to the average of the human coders across all events.
 
 ## Results
 ### Model Comparison
@@ -1060,7 +1053,7 @@ bic.plot <- A2017.bic %>%
 
 ```
 
-Examining the Schwarz weights displayed in \@ref(fig:plot-schwarz-weights), we observed that the five-state generative model showed the highest weights in all three conditions. Only in the moving dots condition, two subjects each displayed the highest weights for one- and three-state models. In sum, we concluded that the five-state generative model has most likely generated the @Andersson2017 data, opposing our expectations. Because the @Ehinger2019 data set showed a similar pattern, we included the results for this data in the supplementary material.  
+Examining the Schwarz weights displayed in \@ref(fig:plot-schwarz-weights), we observed that the five-state generative model showed the highest weights in all three conditions. Only in the moving dots condition, two subjects displayed the highest weights for the four-, and one subject for the three-state model. In sum, we concluded that the five-state generative model has most likely generated the @Andersson2017 data, opposing our expectations. Because the @Ehinger2019 data set showed a similar pattern, we included the results for this data in the supplementary material.  
 A recent model recovery study showed that the BIC tended to prefer overly complex HMMs when they were misspecified [e.g., the conditional independence assumption was violated; @Pohle2017]. Instead, the integrated completed likelihood (ICL) criterion [@Biernacki2000] performed better at choosing the correct data generating model. Therefore, we post hoc computed the weighted ICL criterion (analogous to Schwarz weights) for the models fitted to the @Andersson2017 data set. Using the ICL as the model selection criterion yielded very similar results to the BIC (see supplementary material). The preference for the five-state generative model was even more consistent across conditions and subjects.
 
 (ref:plot-schwarz-weights) Schwarz weights displayed for each subject and generative models with different numbers of states. Top facet labels indicate the condition in the @Andersson2017 data set. Higher weights indicate a better model fit.
@@ -1132,7 +1125,11 @@ A2017.events <- lapply(1:4, function(e) {
         }) %>% reduce(append)
       }
       
-      return(data.frame(mean(dur, na.rm = T)*1e3, sd(dur, na.rm = T)*1e3, length(dur)))
+      mdur <- ifelse(is.nan(mean(dur, na.rm = T)), NA, round(mean(dur, na.rm = T)*1e3))
+      sddur <- ifelse(is.nan(sd(dur, na.rm = T)), NA, round(sd(dur, na.rm = T)*1e3))
+      nrev <- ifelse(length(dur) == 0, NA, length(dur))
+      
+      return(data.frame(mdur, sddur, as.numeric(nrev)))
     }) %>% reduce(rbind)
   })
 })
@@ -1161,7 +1158,7 @@ A2017.rmsd <- lapply(A2017.events, function(event) {
   out[3, -c(1,6:9)] <- NA
   out[4, 6:9] <- NA
   
-  out[out == 0] <- NA
+  out <- out[!apply(out[,-1], 1, function(x) {all(is.na(x))}),]
   
   return(out[,order(names(out))])
 })
@@ -1333,10 +1330,10 @@ names(A2017.conf) <- c("Event", "Fixation", "Saccade", "PSO", "Pursuit", "Blink"
 
 ```
 
-As displayed in \@ref(tab:tab-rmsd-4-fix), gazeHMM showed a relatively low RMSD for fixations in the static condition compared to the other algorithms that were applied to the @Andersson2017 data set. The lower RMSD for fixations indicated more similar classification to the human coders in terms of their mean and SD duration as well as the number of classified fixations. Oppositely, for fixations in the dynamic conditions, the RMSD of gazeHMM was the highest among the compared algorithms, suggesting substantial differences to the human coders. It is likely that these occured because gazeHMM classified a much larger number of fixations with very short durations. For saccades, gazeHMM had high RMSDs for the image and moving dots conditions, but for the video condition the RMSD was comparably low (see Table \@ref(tab:tab-rmsd-4-sac)). Only two other algorithms classified PSOs [NH and LNS; @Nystrom2010; @Larsson2013], and gazeHMM showed consistently higher RMSDs than LNS (see Table \@ref(tab:tab-rmsd-4-pso)). Compared to NH, the RMSD was higher in the image and video conditions but lower in the moving dots condition. No other algorithm parsed smooth pursuits, but the RMSD for gazeHMM was higher than among the human coders (see Table \@ref(tab:tab-rmsd-4-sp)). Again, it classified a much larger number of smooth pursuits with short durations.
+As displayed in Figure \@ref(tab:tab-rmsd-4-fix), gazeHMM showed a relatively low RMSD for fixations in the static condition compared to the other algorithms that were applied to the @Andersson2017 data set. The lower RMSD for fixations indicated more similar classification to the human coders in terms of their mean and SD duration as well as the number of classified fixations. Oppositely, for fixations in the dynamic conditions, the RMSD of gazeHMM was one of the highest among the compared algorithms, suggesting substantial differences to the human coders. It is likely that these occured because gazeHMM classified a much larger number of fixations with very short durations. For saccades, gazeHMM had a relatively high RMSD for the static condition, but it had the lowest RMSD for the moving dots condition, and a moderate value for the video condition (see Table \@ref(tab:tab-rmsd-4-sac)). The deviation was mostly because gazeHMM classified a higher number of saccades than the human coders. Only two other algorithms classified PSOs [NH and LNS; @Nystrom2010; @Larsson2013]. Here, gazeHMM showed a consistently higher RMSD than LNS and lower RMSD than NH (see Table \@ref(tab:tab-rmsd-4-pso)). Our algorithm classified shorter and more PSOs than the human coders. No other algorithm parsed smooth pursuits, but the RMSD for gazeHMM was higher than among the human coders (see Table \@ref(tab:tab-rmsd-4-sp)). Again, it classified a much larger number of smooth pursuits with short durations.
 
 (ref:tab-rmsd-4-fix) Fixation Duration Descriptives and RMSD Between Algorithms and Human Coders
-(ref:tab-rmsd-4-fix-note) Durations are displayed in seconds. gazeHMM-3 classified three and gazeHMM-4 classified four events. RMSD = root mean square deviation. Table adapted from @Andersson2017.
+(ref:tab-rmsd-4-fix-note) Durations are displayed in milliseconds. gazeHMM-3 classified three and gazeHMM-4 classified four events. RMSD = root mean square deviation. Table design adapted from @Andersson2017.
 
 ```{r tab-rmsd-4-fix}
 
@@ -1344,14 +1341,14 @@ apa_table(A2017.rmsd[[1]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-"),
+          format.args = list(na_string = "-", drop0trailing = TRUE),
           caption = "(ref:tab-rmsd-4-fix)",
           note = "(ref:tab-rmsd-4-fix-note)")
 
 ```
 
 (ref:tab-rmsd-4-sac) Saccade Duration Descriptives and RMSD Between Algorithms and Human Coders
-(ref:tab-rmsd-4-sac-note) Durations are displayed in seconds. gazeHMM-3 classified three and gazeHMM-4 classified four events. RMSD = root mean square deviation. Table adapted from @Andersson2017.
+(ref:tab-rmsd-4-sac-note) Durations are displayed in milliseconds. gazeHMM-3 classified three and gazeHMM-4 classified four events. RMSD = root mean square deviation. Table design adapted from @Andersson2017.
 
 ```{r tab-rmsd-4-sac}
 
@@ -1359,14 +1356,14 @@ apa_table(A2017.rmsd[[2]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-"),
+          format.args = list(na_string = "-", drop0trailing = TRUE),
           caption = "(ref:tab-rmsd-4-sac)",
           note = "(ref:tab-rmsd-4-sac-note)")
 
 ```
 
 (ref:tab-rmsd-4-pso) PSO Duration Descriptives and RMSD Between Algorithms and Human Coders
-(ref:tab-rmsd-4-pso-note) Durations are displayed in seconds. gazeHMM-3 classified three and gazeHMM-4 classified four events. RMSD = root mean square deviation. Table adapted from @Andersson2017.
+(ref:tab-rmsd-4-pso-note) Durations are displayed in milliseconds. gazeHMM-3 classified three and gazeHMM-4 classified four events. RMSD = root mean square deviation. Table design adapted from @Andersson2017.
 
 ```{r tab-rmsd-4-pso}
 
@@ -1374,14 +1371,14 @@ apa_table(A2017.rmsd[[3]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-"),
+          format.args = list(na_string = "-", drop0trailing = TRUE),
           caption = "(ref:tab-rmsd-4-pso)",
           note = "(ref:tab-rmsd-4-pso-note)")
 
 ```
 
 (ref:tab-rmsd-4-sp) Smooth Pursuit Duration Descriptives and RMSD Between gazeHMM and Human Coders
-(ref:tab-rmsd-4-sp-note) Durations are displayed in seconds. gazeHMM-4 classified four events. RMSD = root mean square deviation. Table adapted from @Andersson2017.
+(ref:tab-rmsd-4-sp-note) Durations are displayed in milliseconds. gazeHMM-3 classified three and gazeHMM-4 classified four events. RMSD = root mean square deviation. Table design adapted from @Andersson2017.
 
 ```{r tab-rmsd-4-sp}
 
@@ -1389,23 +1386,16 @@ apa_table(A2017.rmsd[[4]],
           col.names = c("Algorithm", rep(c("Mean", "SD", "Events", "RMSD"), 3)),
           col_spanners = list("Image" = c(2, 5), "Moving dots" = c(6, 9), "Video" = c(10, 13)),
           font_size = "tiny",
-          format.args = list(na_string = "-"),
+          format.args = list(na_string = "-", drop0trailing = TRUE),
           caption = "(ref:tab-rmsd-4-sp)",
           note = "(ref:tab-rmsd-4-sp-note)")
 
 ```
 
-Table \@ref(tab:tab-kappa-4) contains the sample-to-sample agreement between the algorithms and human coders measured by Cohen's kappa. For fixations, gazeHMM shows one of the highest agreements for static, and *the* highest agreements for dynamic data. The absolute agreement is substantial for static and slight to fair [@Landis1977]. For saccades, the relative agreement for gazeHMM is low for the image, moderate for the moving dots, and high for the video condition. In absolute terms, the agreement is moderate to substantial. Concerning PSOs, gazeHMM shows higher agreement than NH in the image and video conditions but consistently lower agreement compared to LNS. Absolutely, the agreement is slight to fair. Lastly, the 
-
-Additionally, I compared gazeHMM to the other algorithms by using Cohen's kappa as a measure of sample-to-sample agreement between algorithms and human coders (see Table \@ref(tab:tab-kappa-4)). Absolute kappa values were interpreted according to @Landis1977.  
-For fixations, absolute kappa values in all three conditions indicated a slight to fair agreement between gazeHMM and human coders. Compared to the other algorithms, the agreement of gazeHMM was the lowest in the image condition but the highest in the moving dots and video condition.  
-For saccades, gazeHMM showed kappa values that correspond to a moderate to substantial agreement and were relatively high compared to the other algorithms. However, gazeHMM never reached the highest agreement.  
-For PSOs, absolute kappa values showed slight to fair agreement agreement to human coders. It was relatively low in the moving dots condition and second-rate in the image and video conditions compared to NH and LNS.  
-The agreement for smooth pursuits was moderate in the moving dots condition, fair in the video condition, and slight in the image condition. No other algorithm in the study was designed to detect smooth pursuits.  
-In sum, gazeHMM revealed a relatively high sample-to-sample agreement to human coders for saccades. For PSOs and smooth pursuits, I found fair to moderate agreement. The performance for fixations was absolutely and relatively low.
+Table \@ref(tab:tab-kappa-4) contains the sample-to-sample agreement between the algorithms and human coders measured by Cohen's kappa. For fixations, gazeHMM showed one of the highest agreements for static, and *the* highest agreements for dynamic data. The absolute agreement was substantial for the static and slight to fair for the dynamic conditions [@Landis1977]. For saccades, gazeHMM had the lowest agreement for the static condition and moderate agreement for the dynamic conditions. In absolute terms, the agreement was fair to moderate. Concerning PSOs, gazeHMM showed higher agreement than NH in the image and video conditions but consistently lower agreement compared to LNS. Absolutely, the agreement was slight (image) to moderate (video). Lastly, the agreement for smooth pursuit was lower compared to the human coders and fair in absolute values.
 
 (ref:tab-kappa-4) Cohen's Kappa Between Human Coders and Algorithms for Different Conditions and Events
-(ref:tab-kappa-4-note) Negative values were set to zero. gazeHMM-3 classified three and gazeHMM-4 classified four events. Table adapted from @Andersson2017.
+(ref:tab-kappa-4-note) gazeHMM-3 classified three and gazeHMM-4 classified four events. Table design adapted from @Andersson2017.
 
 ```{r tab-kappa-4}
 
@@ -1424,12 +1414,10 @@ apa_table(A2017.kappa,
 
 ```
 
-#### Disagreement and Confusion
-At last, I computed the overall disagreement [^4] as the percentage of all samples taken together that were classified differently by gazeHMM than the human coders. Figure \@ref(fig:plot-disag) shows that in the image condition, gazeHMM with four events had a higher overall disagreement by between 10 and 20% than all but two of the other algorithms. In the moving dots and video conditions, the disagreement was between 20 and 30% lower than for all other algorithms. Notably, gazeHMM's disagreement was similar across conditions (around 45%). In summary, gazeHMM had a lower overall disagreement than all other algorithms in the moving dots and video conditions but higher disagreement in the image condition.
+Concerning overall disagreement, Figure \@ref(fig:plot-disag) shows that gazeHMM had less disagreement to the human coders across all events for all three conditions. For the static condition, the difference to most other algorithms was only slight ($\text{Md} (\Delta)  = `r abs(median(A2017.disag[["Image"]][3] - A2017.disag[["Image"]][-c(1:4)]))`$), but for the dynamic conditions, the differences were substantial (video: $\text{Md} (\Delta)  = `r abs(median(A2017.disag[["Video"]][4] - A2017.disag[["Video"]][-c(1:4)]))`$) and large (dots: $\text{Md} (\Delta)  = `r abs(median(A2017.disag[["Dots"]][4] - A2017.disag[["Dots"]][-c(1:4)]))`$).  
+To explore which events gazeHMM classified differently than the average of human coder, we looked at the confusion matrix between the two (see Table \@ref(tab:tab-conf-4)). It can be seen that gazeHMM classified many fixations as smooth pursuits and vice versa. Moreover, it confused many PSOs with saccades. The heuristic to detect blinks seemed to work successfully since gazeHMM classified most blink samples in agreement with human coding and only a minor part was mistaken for saccades.
 
-[^4]: Even though I proposed to compute the *disagreement ratio* and @Andersson2017 also used that term, the comparison technically involves percentages and not ratios. Thus, I decided to use only the term *disagreement* instead.
-
-(ref:plot-disag) Disagreement between algorithms and human coders for different conditions (in %). gazeHMM-3 classified three and gazeHMM-4 classified four events. Figure adapted from @Andersson2017.
+(ref:plot-disag) Disagreement between algorithms and human coders for different conditions (in %). gazeHMM-3 classified three and gazeHMM-4 classified four events.
 
 ```{r plot-disag, fig.cap="(ref:plot-disag)"}
 
@@ -1438,7 +1426,7 @@ print(disag.plot)
 ```
 
 (ref:tab-conf-4) Confusion Matrix Between gazeHMM (Rows) and Human Coders (Columns) for Different Conditions
-(ref:tab-conf-4-note) gazeHMM classified four events and blinks.
+(ref:tab-conf-4-note) gazeHMM classified four events and blinks. Values indicate proportions of samples where gazeHMM and human coders agree divided by the total number of samples classified by the human coders for each event (i.e., columns sum to one). 
 
 ```{r tab-conf-4}
 
@@ -1450,9 +1438,6 @@ apa_table(A2017.conf,
           note = "(ref:tab-conf-4-note)")
 
 ```
-
-Contrary to my second hypothesis, applying gazeHMM to a benchmark data set revealed that it did not outperform all other algorithms in terms of RMSD and sample-to-sample agreement. The two criteria rather indicated a moderate performance of gazeHMM. However, the overall disagreement was lower for gazeHMM than for all other algorithms in the dynamic conditions but the highest in the static image condition.  
-Looking at the confusion matrix in Table \@ref(tab:tab-conf-4), it can be seen that gazeHMM confused fixations and smooth pursuit to a large extend. In the static image condition, it overclassified smooth pursuit events, while they were underclassified in the dynamic conditions.
 
 \newpage
 
