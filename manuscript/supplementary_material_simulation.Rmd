@@ -1,0 +1,808 @@
+---
+title             : "Keeping an Eye on Hidden Markov Models in Gaze Data Classification: Supplementary Material Simulation Study"
+shorttitle        : "HMMs in Gaze Classification"
+
+floatsintext      : no
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+linenumbers       : no
+mask              : no
+draft             : no
+
+bibliography      : "references.bib"
+documentclass     : "apa6"
+classoption       : "man"
+output            : papaja::apa6_pdf
+---
+
+```{r packages, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = "asis")
+
+library(papaja)
+library(tidyverse)
+library(here)
+library(psych)
+```
+
+```{r set graphics theme, include=FALSE}
+
+theme_set(theme_apa())
+
+```
+
+# Approximate Ranges for Response Variables
+The approximate ranges that were used to define true parameter ranges and default values are displayed in Table \@ref(tab:sim-ranges). Since we would also like to test the algorithm on extreme data distributions, we extended the ranges beyond those found in typical eye movement data.
+
+(ref:sim-ranges) Approximate Ranges of Response Variables Used to Generate Parameter Values in the Simulation
+(ref:sim-ranges-note) Units are deg/s (velocity), deg/s (acceleration), and radians (angle). ~ indicates that the distribution has a peak at this value. Velocity ranges are based on event velocities reported in @Larsson2013.
+
+```{r sim-ranges}
+
+apa_table(data.frame("Event" = rep(c("Fixation", "Saccade", "PSO", "Smooth pursuit"), each = 3),
+                     "Resp variable" = rep(c("Velocity", "Acceleration", "Angle"), 4),
+                     "Range" = c("0-50", "0-50", "uniform", "50-1000", "50-500", "~0", "20-100", "10-90", paste("~", expression(pi), sep = ""), "20-100", "0-30", "~0")), 
+          caption = "(ref:sim-ranges)",
+          note = "(ref:sim-ranges-note)")
+
+```
+
+# Starting Values and Missing Data
+In the third part of the simulation study, we increased the variation in the starting values used for parameter estimation. The model parameters were set to their default values. For the shape, scale, and concentration parameters, we simultaneously increased the scale parameters of the starting value gamma distributions: For $k \in \{2, 3, 4\}$ states and $\beta_{start} = (\psi_{true}/2)\tau_{start}$ with $\tau_{start} \in \{1, 2, 3\}$, 100 data sets with $N = 2500$ samples were generated each ($100 \times 3 \times 3 = 900$ recoveries).  
+In the last part, we set intervals of the generated data to be missing. The model parameters were set to their default values. For $k \in \{2, 3, 4\}$ states and $m \in \{1, 3, 5\}$ intervals, 100 data sets with $N = 2500$ samples were generated ($100 \times 3 \times 3 = 900$ recoveries). The length of the missing data interval $l \in [1,200]$ samples varied in equidistant steps between the data sets.
+
+```{r load sim results and helper functions, include=FALSE}
+
+# Load simulation results
+
+for (part in 1:4) {
+  
+  load(file = paste(here("simulation/part"), part, ".Rdata", sep = ""))
+  
+}
+
+
+# Create functions to apply and invert mlogit link function (from depmixS4, Visser & Speekenbrink, 2019)
+
+linkfun <- function(p, base) {
+  lfun <- function(p, base) {
+    p <- p/sum(p)
+    beta <- numeric(length(p))
+    if (any(p == 1)) 
+      beta[which(p == 1)] = Inf
+    else beta[-base] <- log(p[-base]/p[base])
+    return(beta)
+  }
+  if (is.matrix(p)) {
+    beta <- t(apply(p, 1, lfun, base = base))
+  }
+  else {
+    beta <- lfun(p, base)
+  }
+  return(beta)
+}
+
+linkinv <- function(eta,base) {
+  linv <- function(eta,base) {
+    pp <- numeric(length(eta))
+    if(any(is.infinite(eta)) || any(eta > log(.Machine$double.xmax)) || any(eta < log(.Machine$double.xmin))) {
+      pp[which(is.infinite(eta))] <- 1
+      pp[which(eta > log(.Machine$double.xmax))] <- 1 # change this to something better!
+    } else {
+      expb <- exp(eta)
+      sumb <- sum(expb)
+      pp[base] <- 1/sumb
+      pp[-base] <- expb[-base]/sumb
+    }
+    return(pp)
+  }
+  if(is.matrix(eta)) {
+    if(ncol(eta)==1) {
+      pp <- as.matrix(apply(eta,1,linv,base=base)) # fixes problem with column matrix eta
+    } else pp <- t(apply(eta,1,linv,base=base)) 	
+  } else {
+    pp <- linv(eta,base)
+  }
+  return(pp)
+}
+
+
+# Create function to transform parameters to normal scale
+
+backtrans <- function(x) {
+  
+  out <- x
+  
+  nms <- names(x)
+  
+  out[str_detect(nms, "(Intercept)")] <- as.vector(apply(matrix(x[str_detect(nms, "(Intercept)")],
+                                                        ncol = sqrt(length(x[str_detect(nms, "(Intercept)")])),
+                                                        byrow = T), 1, linkinv, base = 1))
+  
+  out[nms %in% c("shape", "scale", "kappa")] <- exp(x[nms %in% c("shape", "scale", "kappa")])
+  
+  return(out)
+}
+
+```
+
+```{r calculate RMdSPD, include=FALSE}
+
+rmsd <- list()
+
+for (part in 1:4) {
+  
+  rmsd[[part]] <- lapply(get(paste("estimates.", part, sep = "")), function(x) {
+    lapply(x, function(y) {
+      sqerr <- lapply(y, function(z) {
+        
+        err <- try(((backtrans(z$pars.est) - backtrans(z$pars.true))/
+                      ifelse(backtrans(z$pars.true) == 0, 2*pi, backtrans(z$pars.true)))^2)
+        
+        if(is.numeric(err)) {
+          
+          out <- err
+          
+        } else {
+          
+          out <- rep(NA, length(z$pars.true))
+          
+        }
+        
+        names(out) <- names(z$pars.true)
+        
+        return(out)
+      })
+      
+      rows <- length(sqerr)
+
+      nms <- names(sqerr[[1]])
+
+      pars <- matrix(unlist(sqerr), nrow = rows, byrow = T)
+      
+      msqerr <- apply(pars, 2, median, na.rm = T)
+      
+      names(msqerr) <- nms
+      
+      rmsqerr <- sqrt(msqerr)
+      
+      return(rmsqerr)
+    })
+  })
+}
+
+
+# Display RMdSPD in data frame
+
+rmsd.data <- lapply(rmsd, function(x) lapply(x, as.data.frame))
+rmsd.data <- lapply(rmsd.data, function(x) lapply(x, function(y) {as.data.frame(t(as.matrix(y)))}))
+rmsd.data <- lapply(rmsd.data, function(x) lapply(1:length(x), function(y, data) {
+  names(data[[y]]) <- names(rmsd[[1]][[y]][[1]])
+  return(data[[y]])}, data = x))
+
+
+# Create plots for part 1
+
+plots.rmsd.1 <- lapply(rmsd.data[[1]], function(x) {
+  
+  names.pars.varied <- list(bquote(a["i=j"]), bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                            bquote(beta["acc"]), bquote(kappa))
+  
+  if(ncol(x) == 18) {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]))
+    
+  } else if(ncol(x) == 30) {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]))
+    
+  } else {
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]), bquote(a["i4"]))
+    
+  }
+  
+  names.pars.est <- append(trnames, list(bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                         bquote(beta["acc"]), bquote(mu), bquote(kappa)))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(par.varied = c(0, 1, 2, 3, 4, rep(c(1, 2, 3, 4, 5), (nrow(x) %/% 5)-1)),
+           state.varied = c(1, rep(1, 4), rep(2:((nrow(x) %/% 5)), each = 5))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "RMdSPD", names_repair = "unique") %>%
+    mutate(state.est = rep(c(rep(1:max(state.varied), max(state.varied)+1),
+                         rep(1:max(state.varied), each = 6)), nrow(x)),
+           par.est = rep(c(rep(1, max(state.varied)), 
+                           rep(2:(max(state.varied)+1), each = max(state.varied)), 
+                           rep((max(state.varied)+2):(max(state.varied)+7), max(state.varied))), nrow(x))) %>%
+    mutate_at(vars(par.varied, state.varied, par.est, state.est), as.factor) %>%
+    mutate(state.varied = fct_recode(state.varied, "State 1" = "1", "State 2" = "2", "State 3" = "3", "State 4" = "4"),
+           state.est = fct_recode(state.est, "State 1" = "1", "State 2" = "2", "State 3" = "3", "State 4" = "4"))
+
+  p <- ggplot(data = data.long, aes(x = par.varied, y = par.est, fill = RMdSPD)) +
+    geom_tile() + facet_grid(cols = vars(state.varied), rows = vars(state.est)) +
+    scale_x_discrete(name = "Varied parameter", labels = names.pars.varied) +
+    scale_y_discrete(name = "Estimated parameter", labels = names.pars.est) +
+    scale_fill_distiller(breaks = c(0, 0.1, 0.5, 1), palette = "Spectral")
+  
+  return(p)
+})
+
+
+# Create plots for parts 2,3, and 4
+
+plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
+  
+  if(ncol(x) == 18) {
+    
+    k <- 2
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]))
+    
+  } else if(ncol(x) == 30) {
+    
+    k <- 3
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]))
+    
+  } else {
+    
+    k <-4
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]), bquote(a["i4"]))
+    
+  }
+  
+  names.pars.est <- append(trnames, list(bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                                         bquote(beta["acc"]), bquote(mu), bquote(kappa)))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = 1:3) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "RMdSPD", names_repair = "unique") %>%
+    mutate(state.est = rep(c(rep(1:k, k+1),
+                             rep(1:k, each = 6)), nrow(x)),
+           par.est = rep(c(rep(1, k), 
+                           rep(2:(k+1), each = k), 
+                           rep((k+2):(k+7), k)), nrow(x))) %>%
+    mutate_at(vars(cond, par.est, state.est), as.factor) %>%
+    mutate(state.est = fct_recode(state.est, "State 1" = "1", "State 2" = "2", "State 3" = "3", "State 4" = "4"))
+  
+  p <- ggplot(data = data.long, aes(x = par.est, y = RMdSPD, color = cond)) +
+    geom_point(position = position_dodge(0.25)) + facet_wrap(vars(state.est)) +
+    scale_x_discrete(name = "Estimated parameter", labels = names.pars.est) +
+    scale_y_continuous(breaks = c(0.1, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5)) +
+    geom_hline(yintercept = 0.1, linetype = "dashed") +
+    geom_hline(yintercept = 0.5, linetype = "dashed")
+  
+  if(y == 2) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+  } else if (y == 3) {
+    names.cond <- c("1", "2", "3")
+    label.cond <- bquote(tau["start"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "Number of\nintervals"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}), data = rmsd.data)
+
+```
+
+```{r calculate linear regressions, include=FALSE}
+
+# Calculate regression weights for transition probabilities
+
+regw.tr <- list()
+
+regw.tr <- lapply(get("estimates.1"), function(x) {
+  
+  varpar <- lapply(x[1], function(y) {
+    
+    lapply(y, function(z) {
+      
+      nms <- names(z$pars.true)
+      
+      pars.tr <- logical(length(z$pars.true))
+      
+      pars.tr[str_detect(nms, "(Intercept)")] <- T
+      
+      intpar <- try(cbind(backtrans(z$pars.true[pars.tr]), backtrans(z$pars.est[pars.tr])))
+      
+      if(is.numeric(intpar)) {
+        out <- intpar
+      } else {
+        out <- matrix(NA, nrow = length(z$pars.true[pars.tr]), ncol = 2)
+      }
+      
+      out <- apply(out, 1, list)
+      
+      return(out)
+    })
+  })
+  
+  df <- list()
+  
+  for (i in 1:length(varpar[[1]][[1]])) {
+    
+    df[[i]] <- lapply(varpar, function(y, index) {
+      
+      lapply(y, function(z) {z[[index]]})
+      
+    }, index = i)
+  }
+  
+  df <- lapply(df, as.data.frame)
+
+  df <- lapply(df, function(z) {
+    
+    out <- as.data.frame(t(as.matrix(z)))
+    
+    names(out) <- c("true", "est")
+    
+    return(out)
+  })
+})
+
+
+# Calculate linear regression weights for response parameters
+
+regw.resp <- list()
+  
+regw.resp <- lapply(get("estimates.1"), function(x) {
+  
+  index <- 1:length(x[-1])
+  
+  varpar <- lapply(index, function(i, y) {
+    
+    lapply(y[[i]], function(z) {
+      
+      nms <- names(z$pars.true)
+      
+      #pars.tr <- logical(length(z$pars.true))
+      pars.resp <- logical(length(z$pars.true))
+      
+      #pars.tr[str_detect(nms, "(Intercept)")] <- T
+      pars.resp[nms %in% c("shape", "scale", "kappa")] <- T
+      
+      intpar <- try(c(backtrans(z$pars.true[pars.resp][i]), backtrans(z$pars.est[pars.resp][i])))
+      
+      if(is.numeric(intpar)) {
+        return(intpar)
+      } else {
+        return(rep(NA, 2))
+      }
+    })
+  }, y = x[-1])
+  
+  df <- lapply(varpar, as.data.frame)
+  df <- lapply(df, function(z) {
+
+    out <- as.data.frame(t(as.matrix(z)))
+
+    names(out) <- c("true", "est")
+
+    return(out)
+  })
+})
+
+
+# Plot linear regressions for transition probabilities
+
+D <- 100
+
+regw.tr.data <- lapply(regw.tr, function(x) lapply(x, function(y) rbind(y)))
+regw.tr.data <- lapply(regw.tr.data, function(x) reduce(x, rbind))
+
+plots.lm.tr <- lapply(1:length(regw.tr.data), function(x, y) {
+  
+  data <- y[[x]] %>% 
+    mutate(par = rep(1:(x+1)^2, each = D),
+           From = rep(rep(1:(x+1), each = D), x+1),
+           To = rep(1:(x+1), each = D*(x+1)))
+  
+  p <- ggplot(data, aes(x = true, y = est)) + 
+    facet_grid(rows = vars(From), cols = vars(To), labeller = label_both) +
+    geom_point() + geom_smooth(method = "lm") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    scale_x_continuous(name = "True transition probability") +
+    scale_y_continuous(name = "Estimated transition probability")
+  
+  return(p)
+}, y = regw.tr.data)
+
+
+# Plot linear regressions for response parameters
+
+regw.resp.data <- lapply(regw.resp, function(x) lapply(x, function(y) rbind(y)))
+regw.resp.data <- lapply(regw.resp.data, function(x) reduce(x, rbind))
+
+parnames <- list(bquote(alpha["vel;1"]), bquote(beta["vel;1"]), bquote(alpha["acc;1"]), bquote(beta["acc;1"]),
+                 bquote(alpha["vel;2"]), bquote(beta["vel;2"]), bquote(alpha["acc;2"]), bquote(beta["acc;2"]), bquote(kappa["2"]),
+                 bquote(alpha["vel;3"]), bquote(beta["vel;3"]), bquote(alpha["acc;3"]), bquote(beta["acc;3"]), bquote(kappa["3"]),
+                 bquote(alpha["vel;4"]), bquote(beta["vel;4"]), bquote(alpha["acc;4"]), bquote(beta["acc;4"]), bquote(kappa["4"]))
+
+plots.lm.resp <- lapply(regw.resp.data, function(x) {
+  
+  npar <- nrow(x) %/% D
+  
+  data <- x %>% 
+    mutate(par = rep(1:npar, each = D),
+           type = rep(1, 2, 1, 2))
+  
+  p <- ggplot(data, aes(x = true, y = est)) + 
+    facet_wrap(vars(par), scales = "free", labeller = label_bquote(.(parnames[[par]]))) +
+    geom_point() + geom_smooth(method = "lm") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    scale_x_continuous(name = "True response parameter") +
+    scale_y_continuous(name = "Estimated response parameter")
+  
+  return(p)
+})
+
+```
+
+```{r calculate accuracy, include=FALSE}
+
+# Summarise accuracy
+
+acc.data <- list()
+
+for (part in 1:4) {
+  
+  acc.data[[part]] <- lapply(get(paste("estimates.", part, sep = "")), function(x) {
+    out <- lapply(x, function(y) { 
+      out <- lapply(y, function(z) {
+        
+        if(is.numeric(z$accuracy)) {
+          acc <- z$accuracy
+        } else {
+          acc <- NA
+        }
+        
+        return(acc)
+      })
+      
+      return(as.vector(reduce(out, cbind)))
+    })
+    
+    return(as.data.frame(t(reduce(out, cbind))))
+  })
+}
+
+# Plot accuracy part 1
+
+plots.acc.1 <- lapply(acc.data[[1]], function(x) {
+  
+  names.pars.varied <- list(bquote(a["i=j"]), bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                            bquote(beta["acc"]), bquote(kappa))
+  
+  x <- as_tibble(x, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(par.varied = c(0, 1, 2, 3, 4, rep(c(1, 2, 3, 4, 5), (nrow(x) %/% 5)-1)),
+           state.varied = c(1, rep(1, 4), rep(2:((nrow(x) %/% 5)), each = 5))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    mutate_at(vars(par.varied, state.varied), as.factor) %>%
+    mutate(state.varied = fct_recode(state.varied, "State 1" = "1", "State 2" = "2", "State 3" = "3", "State 4" = "4"))
+  
+  p <- ggplot(data = data.long, aes(x = par.varied, y = accuracy)) +
+    geom_boxplot(outlier.shape = 4) + facet_grid(cols = vars(state.varied)) +
+    scale_x_discrete(name = "Varied parameter", labels = names.pars.varied) + 
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
+  
+  return(p)
+})
+
+
+# Plot accuracy parts 2, 3, and 4
+
+acc.data.234 <- lapply(acc.data[2:4], function(x) reduce(x, rbind))
+
+plots.acc.234 <- lapply(1:3, function(y, data) {
+  
+  x <- as_tibble(data[[y]], .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy")
+  
+  p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
+    geom_boxplot(outlier.shape = 4) + 
+    scale_x_discrete(name = "k (number of states)")  + 
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
+  
+  if(y == 1) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+  } else if (y == 2) {
+    names.cond <- c("1", "2", "3")
+    label.cond <- bquote(tau["start"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "Number of\nintervals"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}, data = acc.data.234)
+
+
+# Plot accuracy over interval parts 2 and 4
+
+plots.acc.int.24 <- lapply(c(1, 3), function(y, data) {
+  
+  x <- as_tibble(data[[y]], .name_repair = "unique")
+  
+  if(y == 1) {
+  
+    int <- rep(seq(1, 5, length.out = D), 9) 
+  
+  } else {
+    
+    int <- rep(floor(seq(1, 200, length.out = D)), 9)
+    
+  }
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy") %>%
+    mutate(int = int)
+  
+  p <- ggplot(data = data.long, aes(x = int, y = accuracy, color = cond)) +
+    facet_grid(cols = vars(k), labeller = partial(label_both, sep = " = ")) + 
+    geom_point()
+  
+  if(y == 1) {
+    names.cond <- c("500", "2500", "10000")
+    label.cond <- "N"
+    x.name <- bquote(tau["noise"])
+  } else {
+    names.cond <- c("1", "3", "5")
+    label.cond <- "Number of\nintervals"
+    x.name <- "Interval length (in samples)"
+  }
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond) +
+    scale_x_continuous(name = x.name) + 
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
+  
+  return(p)
+}, data = acc.data.234)
+
+
+# Exploratory analysis for label switching
+
+load(here("simulation/part3_expl.Rdata"))
+
+labsw <- lapply(1:length(estimates.3), function(x) {
+  out <- lapply(estimates.3[[x]], function(y) {
+    out <- lapply(y, function(z) {
+      
+      kappa <- try(cohen.kappa(z$states)$kappa)
+      
+      states <- z$states
+      
+      if(x == 2 & is.numeric(kappa) & kappa < 0.95) {
+          
+        states$y <- ifelse(z$states$y == 3, 2, ifelse(z$states$y == 2, 3, z$states$y))
+          
+        kappa <- cohen.kappa(states)$kappa
+        
+        if(is.numeric(kappa) & kappa < 0.95) {
+          
+          states$y <- ifelse(z$states$y == 3, 1, ifelse(z$states$y == 1, 3, z$states$y))
+          
+          kappa <- cohen.kappa(states)$kappa
+        }
+        
+        if(is.numeric(kappa) & kappa < 0.95) {
+          
+          states$y <- ifelse(z$states$y == 3, 2, ifelse(z$states$y == 1, 3, 1))
+          
+          kappa <- cohen.kappa(states)$kappa
+        }
+      }
+      
+      if(x == 3 & is.numeric(kappa) & kappa < 0.5) {
+        
+        states$y <- ifelse(z$states$y == 3, 2, ifelse(z$states$y == 2, 3, z$states$y))
+        
+        kappa <- cohen.kappa(states)$kappa
+        
+        if(is.numeric(kappa) & kappa < 0.5) {
+
+          states$y <- ifelse(z$states$y == 3, 4, ifelse(z$states$y == 4, 3, z$states$y))
+
+          kappa <- cohen.kappa(states)$kappa
+        }
+
+        if(is.numeric(kappa) & kappa < 0.5) {
+
+          states$y <- ifelse(z$states$y == 3, 1, ifelse(z$states$y == 1, 3, z$states$y))
+
+          kappa <- cohen.kappa(states)$kappa
+        }
+        
+        if(is.numeric(kappa) & kappa < 0.5) {
+          
+          kappa <- cohen.kappa(z$states)$kappa
+        }
+      }
+      
+      if(is.numeric(kappa)) {return(kappa)
+        } else {return(NA)}
+    })
+    
+    return(as.vector(reduce(out, cbind)))
+  })
+  
+  return(t(reduce(out, cbind)))
+})
+
+labsw.df <- as.data.frame(reduce(labsw, rbind))
+
+
+# Plot exploratory analysis results
+
+plots.acc.expl <- lapply(1, function(y, data) {
+  
+  x <- as_tibble(data, .name_repair = "unique")
+  
+  data.long <- x %>%
+    mutate(cond = as.factor(rep(1:3, 3)),
+           k = as.factor(rep(2:4, each = 3))) %>%
+    pivot_longer(names(x), names_to = "par.est", values_to = "accuracy")
+  
+  p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
+    geom_boxplot(outlier.shape = 4) + 
+    scale_x_discrete(name = "k (number of states)")  + 
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
+  
+  names.cond <- c("1", "2", "3")
+  label.cond <- bquote(tau["start"])
+  
+  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  
+  return(p)
+}, data = labsw.df)
+
+
+```
+
+# Results
+## Addendum Part One
+Figure \@ref(fig:plot-rmdspd-1-2) displays the RMdSPD between true and estimated parameters depending on which parameter has been manipulated in the HMM. The RMdSPD was below 0.1 for all estimated and manipulated parameters, indicating good recovery. The regressions between manipulated true and estimated parameters are shown in Figures \@ref(fig:plot-regtr-1-2) and \@ref(fig:plot-regresp-1-2). With one outlier at parameter $\alpha_{acc;1}$, the estimated parameters matched the true parameters very closely. The deviation seemed to increase slightly with parameter magnitude. Thus, parameter change was capture well and the estimation almost unbiased. Considering accuracy, Figure \@ref(fig:plot-acc-1-2) displays Cohen's kappa between true and estimated hidden state sequences. With two exceptions, kappa values were almost one, suggesting nearly perfect agreement. In sum, the HMM with two states recovered parameters and hidden states very well and outliers only occurred rarely.  
+
+(ref:plot-rmdspd-1-2) RMdSPD between true and estimated parameters of the two-state HMM in part two of the simulation. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-rmdspd-1-2, fig.cap="(ref:plot-rmdspd-1-2)"}
+
+print(plots.rmsd.1[[1]])
+
+```
+
+(ref:plot-regtr-1-2) Regression lines between true and estimated transition probabilities for the two-state HMM in part one. Top facet labels show to and right facet labels show from which state the HMM is moving. Dashed lines refer to perfect recovery.
+
+```{r plot-regtr-1-2, fig.cap="(ref:plot-regtr-1-2)"}
+
+print(plots.lm.tr[[1]])
+
+```
+
+(ref:plot-regresp-1-2) Regression lines between true and estimated response parameters of the two-state HMM in part one. Top facet labels indicate response parameters. Dashed lines refer to perfect recovery.
+
+```{r plot-regresp-1-2, fig.cap="(ref:plot-regresp-1-2)"}
+
+print(plots.lm.resp[[1]] + theme(axis.text = element_text(size = 10)))
+
+```
+
+(ref:plot-acc-1-2) Boxplots displaying Cohen's kappa depending on which parameter of the two-state HMM has been manipulated in part one. Top facet labels indicate for which state parameters have been manipulated. Black solid lines symbolize medians. Crosses represent outliers (distance to first/third quartile higher than 1.5 times the inter-quartile range [IQR]).
+
+```{r plot-acc-1-2, fig.cap="(ref:plot-acc-1-2)"}
+
+print(plots.acc.1[[1]])
+
+```
+
+## Part Three
+The third part of the simulation investigated how increasing the variation in generating starting values affected parameter recover and accuracy of the HMM. For the two-state HMM, all parameters displayed RMdSPDs lower than 0.1 (see Figure \@ref(fig:plot-rmdspd-3-2)), suggesting good recovery. Cohen's kappa values were slightly lower than 1, indicating almost perfect accuracy (see Figure \@ref(fig:plot-acc-3)). For the three-state HMM, RMdSPDs were lower than 0.1 except for $a_{12}$ and $a_{31}$, which were below 0.5 (see Figure \@ref(fig:plot-rmdspd-3-3)), which means they were moderately well recovered. As in previous parts, Cohen's kappa values were mostly above 0.95 (almost perfect accuracy) with exceptions clustering around zero and -0.33 (see Figure \@ref(fig:plot-acc-3)). Regarding the four state-HMM, RMdSPDs of transition probabilities for states one and four were clustered above 0.1, other estimated parameters in the model showed values below 0.1 (see Figure \@ref(fig:plot-rmdspd-3-4)). The HMM showed substantial to almost perfect accuracy, as Cohen's kappa values were mostly above 0.8 with a few values clustering around 0.6, 0.25, and zero (see Figure \@ref(fig:plot-acc-3)). Taken together, increasing the variation in starting values for parameter estimation did neither affect the parameter recovery nor the accuracy.  
+
+(ref:plot-rmdspd-3-2) RMdSPD between true and estimated parameters of the two-state HMM in part three of the simulation. Colours indicate the variation in starting values used to estimate parameters. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-rmdspd-3-2, fig.cap="(ref:plot-rmdspd-3-2)"}
+
+print(plots.rmsd.234[[2]][[1]] + coord_flip())
+
+```
+
+(ref:plot-acc-3) Boxplots displaying Cohen's kappa depending on the number of states in the HMM in part three. Colours indicate the variation in starting values used to estimate parameters. Solid vertical lines symbolize medians and hinges the first and third quartile. Whiskers range from hinges to lowest/highest value within 1.5 times the IQR. Crosses represent outliers.
+
+```{r plot-acc-3, fig.cap="(ref:plot-acc-3)"}
+
+print(plots.acc.234[[2]])
+
+```
+
+(ref:plot-rmdspd-3-3) RMdSPD between true and estimated parameters of the three-state HMM in part three of the simulation. Colours indicate the variation in starting values used to estimate parameters. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-rmdspd-3-3, fig.cap="(ref:plot-rmdspd-3-3)"}
+
+print(plots.rmsd.234[[2]][[2]] + coord_flip())
+
+```
+
+(ref:plot-rmdspd-3-4) RMdSPD between true and estimated parameters of the four-state HMM in part three of the simulation. Colours indicate the variation in starting values used to estimate parameters. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-rmdspd-3-4, fig.cap="(ref:plot-rmdspd-3-4)"}
+
+print(plots.rmsd.234[[2]][[3]] + coord_flip())
+
+```
+
+## Part Four
+In this part, we explored post-hoc whether clusters of low Cohen's kappa values were due to label switching. According to @Visser2019, label switching occurs when exchanging the order of the states leads to equally likely models. Thus, the model is accurate but has oppositely estimated states compared to the true states. In this case, an HMM with three states that is perfectly accurate but has two labels switched would have a Cohen's kappa of 0. To test if label switching occurred, we manually switched one or two labels post-hoc (see Figure \@ref(fig:plot-acc-3-expl)). It can be seen that this approach resolved low accuracy clusters for three and four states.
+
+(ref:plot-acc-3-expl) Boxplots displaying Cohen's kappa depending on the number of states in the HMM in part three after state labels were switched post-hoc (exploratory analysis). Colours indicate the variation in starting values used to estimate parameters. Solid lines symbolize medians and hinges the first and third quartile. Whiskers range from hinges to lowest/highest value within 1.5 times the IQR. Crosses represent outliers.
+
+```{r plot-acc-3-expl, fig.cap="(ref:plot-acc-3-expl)"}
+
+print(plots.acc.expl[[1]])
+
+```
+
+In the last part, data intervals of varying length were set to be missing. Regarding parameter recovery, RMdSPDs were almost exactly mirroring those in the previous part for two, three, and four states (see Figures \@ref(fig:plot-rmdspd-4-2), \@ref(fig:plot-rmdspd-4-3), and \@ref(fig:plot-rmdspd-4-4), respectively). Looking at accuracies, Figure \@ref(fig:plot-acc-4) illustrates an interaction between the length of and amount of missing data intervals. Cohen's kappa values linearly decreased with the length of missing data intervals and the decrease became linearly steeper when more intervals were included. For two and three state models, kappas started at almost one (almost perfect) and decreased to 0.6 (substantial accuracy) for five missing intervals. For the four-state model, kappas started around 0.85 (almost perfect) and decreased to 0.5 (substantial accuracy) for five missing intervals. As in previous parts, several kappa values clustered around zero and -0.33 for the three-state model and around 0.6, 0.25, and zero for the four-state model. In total, missing data did not affect the parameter recovery but linearly decreased the accuracy of the model from a nearly perfect to a moderate extent.  
+
+(ref:plot-rmdspd-4-2) RRMdSPD between true and estimated parameters of the two-state HMM in part four of the simulation. Colours indicate the number of missing data intervals. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Right facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-rmdspd-4-2, fig.cap="(ref:plot-rmdspd-4-2)"}
+
+print(plots.rmsd.234[[3]][[1]] + coord_flip())
+
+```
+
+(ref:plot-rmdspd-4-3) RMdSPD between true and estimated parameters of the three-state HMM in part four of the simulation. Colours indicate the number of missing data intervals. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-rmdspd-4-3, fig.cap="(ref:plot-rmdspd-4-3)"}
+
+print(plots.rmsd.234[[3]][[2]] + coord_flip())
+
+```
+
+(ref:plot-rmdspd-4-4) RMdSPD between true and estimated parameters of the four-state HMM in part four of the simulation. Colours indicate the number of missing data intervals. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-rmdspd-4-4, fig.cap="(ref:plot-rmdspd-4-4)"}
+
+print(plots.rmsd.234[[3]][[3]] + coord_flip())
+
+```
+
+(ref:plot-acc-4) Cohen's kappa depending on the length of missing data intervals. Colours indicate the number of missing data intervals. Top facet labels indicate the number of states in the HMM.
+
+```{r plot-acc-4, fig.cap="(ref:plot-acc-4)"}
+
+print(plots.acc.int.24[[2]])
+
+```
+
+\newpage
+
+# References
+
+\begingroup
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
+<div id = "refs"></div>
+\endgroup

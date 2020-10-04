@@ -26,7 +26,7 @@ abstract: |
 keywords          : "eye movements; eye-tracking; parameter recovery; dependent mixture models"
 wordcount         : "8861"
 
-bibliography      : "report.bib"
+bibliography      : "references.bib"
 
 floatsintext      : yes
 figurelist        : yes
@@ -959,11 +959,11 @@ print(plots.acc.1[[3]] + theme(axis.text = element_text(size = 8)))
 ### Sample Size and Noise Variation
 In the second part, we varied the sample size of the HMM and added noise to the generated data. For the two-state HMM, the RMdSPDs were above 0.5 for $\beta_{vel}$ and $\beta_{acc}$ in both states (see Figure \@ref(fig:plot-rmdspd-2-2)), suggesting bad recovery. The other estimated parameters showed RMdSPDs close to or below 0.1, which means they were recovered well. Increasing the sample size seemed to improve RMdSPDs for most parameters slightly. For $\beta_{vel}$ and $\beta_{acc}$ in both states, models with 2500 samples had the lowest RMdSPDs. Accuracy measured by Cohen's kappa was almost perfect with kappa values very close to one (see Figure \@ref(fig:plot-acc-2), left plot).
 
-(ref:plot-rmdspd-2-2) RMdSPD between true and estimated parameters of the two-state HMM in part two of the simulation. Colours indicate different sizes of generated data. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+(ref:plot-rmdspd-2-2) RMdSPD between true and estimated parameters of the two-state HMM in part two of the simulation. Colours indicate different sizes of generated data. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
 
 ```{r plot-rmdspd-2-2, fig.cap="(ref:plot-rmdspd-2-2)"}
 
-print(plots.rmsd.234[[1]][[1]] + theme(axis.text = element_text(size = 8)))
+print(plots.rmsd.234[[1]][[1]] + coord_flip())
 
 ```
 
@@ -977,22 +977,22 @@ print(plots.acc.int.24[[1]])
 
 Regarding three states, the RMdSPDs for the $\beta_{vel}$ and $\beta_{acc}$ were above 0.5 in all three states (see Figure \@ref(fig:plot-rmdspd-2-3)), indicating bad recovery. Again, the other estimated parameters were below or close to 0.1, only $a_{12}$ and $a_{31}$ with 500 samples were closer to 0.5. For most parameters across all three states, models with higher sample sizes had lower RMdSPDs. The state recovery of the estimated models was almost perfect with most kappa values above 0.95 (see Figure \@ref(fig:plot-acc-2), middle plot). Several outliers clustered around kappas of zero and -0.33, signaling label switching.
 
-(ref:plot-rmdspd-2-3) RMdSPD between true and estimated parameters of the three-state HMM in part two of the simulation. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+(ref:plot-rmdspd-2-3) RMdSPD between true and estimated parameters of the three-state HMM in part two of the simulation. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
 
 ```{r plot-rmdspd-2-3, fig.cap="(ref:plot-rmdspd-2-3)"}
 
-print(plots.rmsd.234[[1]][[2]] + theme(axis.text = element_text(size = 6)))
+print(plots.rmsd.234[[1]][[2]] + coord_flip())
 
 ```
 
 RMdSPDs regarding the four-state HMM are displayed in Figure \@ref(fig:plot-rmdspd-2-4). For states one and four, values for most parameters (including all transition probabilities) were above 0.5, suggesting bad recovery. Similarly, $\beta_{vel}$ and $\beta_{acc}$ in states two and three showed bad recovery. For states two and three, higher sample sizes showed slightly lower RMdSPDs. As in the previous part, most Cohen's kappa values ranged between 0.6 and 0.9, meaning substantial to almost perfect agreement between true and estimated states (Figure \@ref(fig:plot-acc-2), right plot). Multiple kappa values clustered around 0.25 or zero, which can be explained by label switching.   
 In general, the HMM recovered parameters well despite noise being added to the data. However, in the four-state model, the parameter recovery for states one and four substantially decreased. In the three- and four-state models, scale parameters of gamma distributions were badly recovered. Increasing the sample size in the HMM slightly improved the recovery of most parameters. The state recovery of the model was slightly lowered when more states were included, but it was neither affected by the noise variability $\tau_{noise}$ nor the sample size.
 
-(ref:plot-rmdspd-2-4) RMdSPD between true and estimated parameters of the three-state HMM in part two of the simulation. Labels on the x-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+(ref:plot-rmdspd-2-4) RMdSPD between true and estimated parameters of the three-state HMM in part two of the simulation. Labels on the y-axis indicate for which estimated parameter the RMdSPD is displayed. Top facet labels denote to which state estimated parameters belong. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
 
 ```{r plot-rmdspd-2-4, fig.cap="(ref:plot-rmdspd-2-4)"}
 
-print(plots.rmsd.234[[1]][[3]] + theme(axis.text = element_text(size = 8)))
+print(plots.rmsd.234[[1]][[3]] + coord_flip())
 
 ```
 
@@ -1044,7 +1044,7 @@ load(here("validation/Andersson2017_raw.Rdata"))
 
 ```{r calculate Schwarz weights, include=FALSE}
 
-# Compute Schwarz weights
+# Compute Schwarz weights (from Wagenmakers & Farrell, 2004)
 
 schwarz.weights <- function(bic, na.rm = T) {
   

@@ -1,0 +1,223 @@
+---
+title             : "Keeping an Eye on Hidden Markov Models in Gaze Data Classification: Supplementary Material Validation Study"
+shorttitle        : "HMMs in Gaze Classification"
+
+floatsintext      : no
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+linenumbers       : no
+mask              : no
+draft             : no
+
+bibliography      : "references.bib"
+documentclass     : "apa6"
+classoption       : "man"
+output            : papaja::apa6_pdf
+---
+
+```{r packages, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = "asis")
+
+library(papaja)
+library(tidyverse)
+library(here)
+library(psych)
+library(depmixS4)
+source(here("algorithm/model_helper_functions.R"))
+```
+
+```{r set graphics theme, include=FALSE}
+
+theme_set(theme_apa())
+
+```
+
+```{r calculate Schwarz weights for Ehinger et al., include=FALSE}
+
+load(here("validation/Ehinger2019_fitted.Rdata"))
+
+# From Wagenmakers & Farrell (2004)
+
+schwarz.weights <- function(bic, na.rm = T) {
+  
+  d.bic <- bic - min(bic, na.rm = na.rm) # eq 2
+  
+  exp(-0.5 * d.bic)/sum(exp(-0.5 * d.bic), na.rm = na.rm) # eq 4
+  
+}
+
+E2019.bic <- lapply(E2019.fit, function(subj) {
+  out <- lapply(subj, function(task) {
+    out <- lapply(task, function(block) {
+      out <- lapply(1:length(block), function(mod) {
+        
+        if(mod == 1) {
+          
+          bic <- try(-2*block[[mod]][[1]] + 6*log(block[[mod]][[2]]))
+          
+        } else {
+          
+          bic <- try(BIC(block[[mod]]$model))
+          
+        }
+        
+        return(ifelse(is.numeric(bic), bic, NA))
+      })
+      
+      return(schwarz.weights(unlist(out)))
+    })
+    
+    df <- as.data.frame(reduce(out, rbind))
+    
+    names(df) <- paste("model_", 1:ncol(df), sep = "")
+    
+    #blockm <- apply(df, 2, median, na.rm = T)
+    
+    return(df)
+  })
+  
+  return(out)
+})
+
+
+# Create Schwarz weight plots
+
+bic.plot <- list()
+
+bic.plot[[4]] <- reduce(reduce(E2019.bic, rbind)[,1], rbind) %>%
+  mutate(Subject = rep(1:15, each = 6),
+         Block = rep(1:6, 15)) %>%
+  pivot_longer(contains("model"), names_to = "model", values_to = "weight") %>%
+  mutate_at(c("Subject", "Block", "model"), as.factor) %>%
+  ggplot(aes(x = model, y = Subject)) + geom_tile(aes(fill = weight)) +
+  facet_wrap(vars(Block), ncol = 2, labeller = label_both) +
+  scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
+  scale_y_discrete(name = "Subject") +
+  scale_fill_distiller(name = "Schwarz\nweight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), 
+                       palette = "Spectral")
+
+bic.plot[[5]] <- reduce(reduce(E2019.bic, rbind)[,2], rbind) %>%
+  mutate(Subject = rep(1:15, each = 6),
+         Block = rep(1:6, 15)) %>%
+  pivot_longer(contains("model"), names_to = "model", values_to = "weight") %>%
+  mutate_at(c("Subject", "Block", "model"), as.factor) %>%
+  ggplot(aes(x = model, y = Subject)) + geom_tile(aes(fill = weight)) +
+  facet_wrap(vars(Block), ncol = 2, labeller = label_both) +
+  scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
+  scale_y_discrete(name = "Subject") +
+  scale_fill_distiller(name = "Schwarz\nweight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), 
+                       palette = "Spectral")
+
+```
+
+(ref:plot-schwarz-weights-task4) Schwarz weights displayed for each subject and HMMs with different numbers of states. Models were applied to task 4 of the @Ehinger2019 data set. Higher weights indicate better model fit. Grey tiles indicate erroneous model fits.
+
+```{r plot-schwarz-weights-task4, fig.cap="(ref:plot-schwarz-weights-task4)", fig.height=8}
+
+print(bic.plot[[4]])
+
+```
+
+(ref:plot-schwarz-weights-task5) Schwarz weights displayed for each subject and HMMs with different numbers of states. Models were applied to task 5 of the @Ehinger2019 data set. Higher weights indicate better model fit. Grey tiles indicate erroneous model fits.
+
+```{r plot-schwarz-weights-task5, fig.cap="(ref:plot-schwarz-weights-task5)", fig.height=8}
+
+print(bic.plot[[5]])
+
+```
+
+```{r calculate integrated complete likelihood criterion, include=FALSE}
+
+load(here("validation/Andersson2017_fitted.Rdata"))
+
+# Compute ICL
+
+ICL <- function(mod) {
+  
+  -2*logLik(mod, method = "classification") + npar(mod)*log(nobs(mod))
+  
+}
+
+A2017.icl <- lapply(A2017.fit, function(stim) {
+  out <- lapply(stim, function(subj) {
+    out <- lapply(1:length(subj), function(mod) {
+      
+      if(mod == 1) {
+        
+        icl <- try(-2*subj[[mod]][["LL"]] + 6*log(subj[[mod]][["N"]]))
+        
+      } else {
+        
+        icl <- try(ICL(subj[[mod]]$model))
+        
+      }
+      
+      return(ifelse(is.numeric(icl), icl, NA))
+    })
+    
+    return(schwarz.weights(unlist(out)))
+  })
+  
+  df <- as.data.frame(reduce(out, rbind))
+  
+  names(df) <- paste("model_", 1:length(stim[[1]]), sep = "")
+  
+  return(df)
+})
+
+
+# Create ICL weight plots
+
+icl.plot <- lapply(A2017.icl, function(x) {
+  
+  data.long <- x %>% 
+    mutate(subject = 1:nrow(x)) %>%
+    pivot_longer(names(x), names_to = "model", values_to = "weight") %>%
+    mutate_at(c("subject", "model"), as.factor)
+  
+  p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight)) +
+    scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
+    scale_y_discrete(name = "Subject") +
+    scale_fill_distiller(name = "ICL weight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), palette = "Spectral")
+  
+  return(p)
+})
+
+```
+
+(ref:plot-icl-weights-img) ICL weights displayed for each subject and HMMs with different numbers of states. Models were applied to the image condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-icl-weights-img, fig.cap="(ref:plot-icl-weights-img)"}
+
+print(icl.plot[[2]])
+
+```
+
+(ref:plot-icl-weights-dots) ICL weights displayed for each subject and HMMs with different numbers of states. Models were applied to the moving dots condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-icl-weights-dots, fig.cap="(ref:plot-icl-weights-dots)"}
+
+print(icl.plot[[1]])
+
+```
+
+(ref:plot-icl-weights-vid) ICL weights displayed for each subject and HMMs with different numbers of states. Models were applied to the video condition of the @Andersson2017 data set. Higher weights indicate better model fit.
+
+```{r plot-icl-weights-vid,  fig.cap="(ref:plot-icl-weights-vid)"}
+
+print(icl.plot[[3]])
+
+```
+
+\newpage
+
+# References
+
+\begingroup
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
+<div id = "refs"></div>
+\endgroup
