@@ -18,13 +18,13 @@ affiliation:
     institution   : "Department of Psychology, University of Amsterdam. Amsterdam, The Netherlands"
 
 authornote: |
-  We would like to thank Daan van Renswoude and Maartje Raijmakers for their helpful comments on earlier versions of this paper. Furthermore, we would like to acknowledge feedback by Karel Veldkamp and Phil Norberts in the early stage of this project.
+  We would like to thank Daan van Renswoude, Maartje Raijmakers, and Maximilian Maier for their helpful comments on earlier versions of this paper. Furthermore, we would like to acknowledge feedback by Karel Veldkamp and Phil Norberts in the early stage of this project.
 
 abstract: |
   Eye-tracking allows researchers to infer cognitive processes from eye movements that are classified into distinct events. Parsing the events is typically done by algorithms. Previous algorithms have successfully used hidden Markov models (HMMs) for classification but still inhere several weaknesses. To adress these weaknesses, we developed gazeHMM, an algorithm that uses an HMM as a generative model, has no critical parameters to be set by users, and does not require human coded data as input. The algorithm classifies gaze data into fixations, saccades, and optionally postsaccadic oscillations and smooth pursuits. We evaluated the performance of gazeHMM in a simulation study and on two benchmark data sets. The simulation study showed that gazeHMM successfully recovered HMM parameters and hidden state sequences. Critical exceptions for good recovery were including the smooth pursuit state in the generative model and noisy data. The performance on benchmark data was assessed by model comparison and agreement of the classification to human coding compared to other algorithms. The model comparison yielded preferred generative models for the benchmark data with more events than we expected. Nevertheless, gazeHMM showed relatively high similarity to human coding and outperformed the other algorithms in some agreement criteria. For dynamic stimuli, our algorithm tended to switch rapidly between fixations and smooth pursuits. Thus, we recommend using gazeHMM for classifiying smooth pursuits only in explorative settings. Future HMM algorithms could use covariates to better capture eye movement processes and explicitly model event durations to improve the classification of smooth pursuits.
   
 keywords          : "eye movements; eye-tracking; parameter recovery; dependent mixture models"
-wordcount         : "8861"
+wordcount         : "9605"
 
 bibliography      : "references.bib"
 
@@ -963,7 +963,7 @@ In the second part, we varied the sample size of the HMM and added noise to the 
 
 ```{r plot-rmdspd-2-2, fig.cap="(ref:plot-rmdspd-2-2)"}
 
-print(plots.rmsd.234[[1]][[1]] + coord_flip())
+print(plots.rmsd.234[[1]][[1]] + coord_flip() + theme(axis.text.x = element_text(size = 10)))
 
 ```
 
@@ -981,7 +981,7 @@ Regarding three states, the RMdSPDs for the $\beta_{vel}$ and $\beta_{acc}$ were
 
 ```{r plot-rmdspd-2-3, fig.cap="(ref:plot-rmdspd-2-3)"}
 
-print(plots.rmsd.234[[1]][[2]] + coord_flip())
+print(plots.rmsd.234[[1]][[2]] + coord_flip() + theme(axis.text.x = element_text(size = 8)))
 
 ```
 
@@ -992,7 +992,7 @@ In general, the HMM recovered parameters well despite noise being added to the d
 
 ```{r plot-rmdspd-2-4, fig.cap="(ref:plot-rmdspd-2-4)"}
 
-print(plots.rmsd.234[[1]][[3]] + coord_flip())
+print(plots.rmsd.234[[1]][[3]] + coord_flip() + theme(axis.text.x = element_text(size = 9)))
 
 ```
 
