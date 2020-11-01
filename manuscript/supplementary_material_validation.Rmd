@@ -25,6 +25,7 @@ library(tidyverse)
 library(here)
 library(psych)
 library(depmixS4)
+library(viridis)
 source(here("algorithm/model_helper_functions.R"))
 ```
 
@@ -95,8 +96,7 @@ bic.plot[[4]] <- reduce(reduce(E2019.bic, rbind)[,1], rbind) %>%
   facet_wrap(vars(Block), ncol = 2, labeller = label_both) +
   scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
   scale_y_discrete(name = "Subject") +
-  scale_fill_distiller(name = "Schwarz\nweight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), 
-                       palette = "Spectral")
+  scale_fill_viridis_c(name = "Schwarz\nweight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1))
 
 bic.plot[[5]] <- reduce(reduce(E2019.bic, rbind)[,2], rbind) %>%
   mutate(Subject = rep(1:15, each = 6),
@@ -107,8 +107,7 @@ bic.plot[[5]] <- reduce(reduce(E2019.bic, rbind)[,2], rbind) %>%
   facet_wrap(vars(Block), ncol = 2, labeller = label_both) +
   scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
   scale_y_discrete(name = "Subject") +
-  scale_fill_distiller(name = "Schwarz\nweight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), 
-                       palette = "Spectral")
+  scale_fill_viridis_c(name = "Schwarz\nweight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1))
 
 ```
 
@@ -180,7 +179,7 @@ icl.plot <- lapply(A2017.icl, function(x) {
   p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight)) +
     scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
     scale_y_discrete(name = "Subject") +
-    scale_fill_distiller(name = "ICL weight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), palette = "Spectral")
+    scale_fill_viridis_c(name = "ICL weight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1))
   
   return(p)
 })

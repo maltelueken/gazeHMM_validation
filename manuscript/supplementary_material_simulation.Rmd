@@ -24,6 +24,7 @@ library(papaja)
 library(tidyverse)
 library(here)
 library(psych)
+library(viridis)
 ```
 
 ```{r set graphics theme, include=FALSE}
@@ -225,7 +226,7 @@ plots.rmsd.1 <- lapply(rmsd.data[[1]], function(x) {
     geom_tile() + facet_grid(cols = vars(state.varied), rows = vars(state.est)) +
     scale_x_discrete(name = "Varied parameter", labels = names.pars.varied) +
     scale_y_discrete(name = "Estimated parameter", labels = names.pars.est) +
-    scale_fill_distiller(breaks = c(0, 0.1, 0.5, 1), palette = "Spectral")
+    scale_fill_viridis_c(breaks = c(0, 0.1, 0.5, 1))
   
   return(p)
 })
@@ -289,7 +290,7 @@ plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
     label.cond <- "Number of\nintervals"
   }
   
-  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  p <- p + scale_color_viridis_d(name = label.cond, labels = names.cond)
   
   return(p)
 }), data = rmsd.data)
@@ -531,7 +532,7 @@ plots.acc.234 <- lapply(1:3, function(y, data) {
     label.cond <- "Number of\nintervals"
   }
   
-  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  p <- p + scale_color_viridis_d(name = label.cond, labels = names.cond)
   
   return(p)
 }, data = acc.data.234)
@@ -575,7 +576,8 @@ plots.acc.int.24 <- lapply(c(1, 3), function(y, data) {
   
   p <- p + scale_color_discrete(name = label.cond, labels = names.cond) +
     scale_x_continuous(name = x.name) + 
-    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
+    scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1)) +
+    scale_color_viridis_d()
   
   return(p)
 }, data = acc.data.234)
@@ -672,7 +674,7 @@ plots.acc.expl <- lapply(1, function(y, data) {
   names.cond <- c("1", "2", "3")
   label.cond <- bquote(tau["start"])
   
-  p <- p + scale_color_discrete(name = label.cond, labels = names.cond)
+  p <- p + scale_color_viridis_d(name = label.cond, labels = names.cond)
   
   return(p)
 }, data = labsw.df)
