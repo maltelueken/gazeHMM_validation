@@ -2,7 +2,9 @@
 title             : "Keeping an Eye on Hidden Markov Models in Gaze Data Classification: Supplementary Material Validation Study"
 shorttitle        : "HMMs in Gaze Classification"
 
-floatsintext      : no
+header-includes   :
+  - \usepackage{placeins}
+floatsintext      : yes
 figurelist        : no
 tablelist         : no
 footnotelist      : no
@@ -92,7 +94,7 @@ bic.plot[[4]] <- reduce(reduce(E2019.bic, rbind)[,1], rbind) %>%
          Block = rep(1:6, 15)) %>%
   pivot_longer(contains("model"), names_to = "model", values_to = "weight") %>%
   mutate_at(c("Subject", "Block", "model"), as.factor) %>%
-  ggplot(aes(x = model, y = Subject)) + geom_tile(aes(fill = weight)) +
+  ggplot(aes(x = model, y = Subject)) + geom_tile(aes(fill = weight), color = "black") +
   facet_wrap(vars(Block), ncol = 2, labeller = label_both) +
   scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
   scale_y_discrete(name = "Subject") +
@@ -103,7 +105,7 @@ bic.plot[[5]] <- reduce(reduce(E2019.bic, rbind)[,2], rbind) %>%
          Block = rep(1:6, 15)) %>%
   pivot_longer(contains("model"), names_to = "model", values_to = "weight") %>%
   mutate_at(c("Subject", "Block", "model"), as.factor) %>%
-  ggplot(aes(x = model, y = Subject)) + geom_tile(aes(fill = weight)) +
+  ggplot(aes(x = model, y = Subject)) + geom_tile(aes(fill = weight), color = "black") +
   facet_wrap(vars(Block), ncol = 2, labeller = label_both) +
   scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
   scale_y_discrete(name = "Subject") +
@@ -176,7 +178,7 @@ icl.plot <- lapply(A2017.icl, function(x) {
     pivot_longer(names(x), names_to = "model", values_to = "weight") %>%
     mutate_at(c("subject", "model"), as.factor)
   
-  p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight)) +
+  p <- ggplot(data.long, aes(x = model, y = subject)) + geom_tile(aes(fill = weight), color = "black") +
     scale_x_discrete(name = "Number of states", labels = as.character(1:5)) +
     scale_y_discrete(name = "Subject") +
     scale_fill_viridis_c(name = "ICL weight", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1))
@@ -210,6 +212,7 @@ print(icl.plot[[3]])
 
 ```
 
+\FloatBarrier
 \newpage
 
 # References

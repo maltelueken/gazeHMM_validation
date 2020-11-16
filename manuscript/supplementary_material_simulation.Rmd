@@ -223,7 +223,7 @@ plots.rmsd.1 <- lapply(rmsd.data[[1]], function(x) {
            state.est = fct_recode(state.est, "State 1" = "1", "State 2" = "2", "State 3" = "3", "State 4" = "4"))
 
   p <- ggplot(data = data.long, aes(x = par.varied, y = par.est, fill = RMdSPD)) +
-    geom_tile() + facet_grid(cols = vars(state.varied), rows = vars(state.est)) +
+    geom_tile(color = "black") + facet_grid(cols = vars(state.varied), rows = vars(state.est)) +
     scale_x_discrete(name = "Varied parameter", labels = names.pars.varied) +
     scale_y_discrete(name = "Estimated parameter", labels = names.pars.est) +
     scale_fill_viridis_c(breaks = c(0, 0.1, 0.5, 1))
@@ -273,7 +273,7 @@ plots.rmsd.234 <- lapply(2:4, function(y, data) lapply(data[[y]], function(x) {
     mutate(state.est = fct_recode(state.est, "State 1" = "1", "State 2" = "2", "State 3" = "3", "State 4" = "4"))
   
   p <- ggplot(data = data.long, aes(x = par.est, y = RMdSPD, color = cond)) +
-    geom_point(position = position_dodge(0.25)) + facet_wrap(vars(state.est)) +
+    geom_point(position = position_dodge(0.25)) + facet_grid(rows = vars(state.est)) +
     scale_x_discrete(name = "Estimated parameter", labels = names.pars.est) +
     scale_y_continuous(breaks = c(0.1, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5)) +
     geom_hline(yintercept = 0.1, linetype = "dashed") +
@@ -440,10 +440,100 @@ plots.lm.resp <- lapply(regw.resp.data, function(x) {
   
   p <- ggplot(data, aes(x = true, y = est)) + 
     facet_wrap(vars(par), scales = "free", labeller = label_bquote(.(parnames[[par]]))) +
-    geom_point() + geom_smooth(method = "lm") +
+    geom_point() + geom_smooth(method = "lm", color = "#FDE725FF") +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
     scale_x_continuous(name = "True response parameter") +
     scale_y_continuous(name = "Estimated response parameter")
+  
+  return(p)
+})
+
+
+# Plot parameters over noise interval part 2
+
+par.noise.data <- lapply(get("estimates.2"), function(x) {
+  lapply(x, function(y) {
+    true <- lapply(y, function(z) {
+      
+      true <- backtrans(z$pars.true)
+      
+      return(true)
+    }) %>% reduce(cbind)
+    
+    est <- lapply(y, function(z) {
+      
+      true <- backtrans(z$pars.true)
+      est <- try(backtrans(z$pars.est))#ifelse(class(z$pars.est) == "try-error", rep(NA, length(true)), backtrans(z$pars.est))
+      
+      if(class(est) == "try-error") est <- rep(NA, length(true))
+      
+      return(est)
+    }) %>% reduce(cbind)
+    
+    return(list(as.data.frame(true), as.data.frame(est)))
+  })
+})
+
+plot.par.noise <- lapply(1:length(par.noise.data), function(x) {
+  out <- lapply(par.noise.data[[x]], function(y) {
+    
+    if(nrow(y[[1]]) == 18) {
+    
+    k <- 2
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]))
+    
+    } else if(nrow(y[[1]]) == 30) {
+    
+    k <- 3
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]))
+    
+    } else {
+    
+    k <-4
+    
+    trnames <- list(bquote(rho["i"]), bquote(a["i1"]), bquote(a["i2"]), bquote(a["i3"]), bquote(a["i4"]))
+    
+    }
+  
+    names.pars.est <<- append(trnames, list(bquote(alpha["vel"]), bquote(beta["vel"]), bquote(alpha["acc"]),
+                                         bquote(beta["acc"]), bquote(mu), bquote(kappa)))
+    
+    true <- as.data.frame(t(y[[1]])) %>% pivot_longer(everything(), names_to = "par", values_to = "true.value")
+    est <- as.data.frame(t(y[[2]])) %>% pivot_longer(everything(), names_to = "par", values_to = "est.value")
+    
+    par <- as.factor(rep(c(rep(1, k), 
+                 rep(2:(k+1), each = k), 
+                 rep((k+2):(k+7), k)), D))
+    par.state <- as.factor(rep(c(rep(1:k, k+1), rep(1:k, each = 6)), D))
+    noise <- rep(seq(1, 5, length.out = D), each = length(par)/D)
+    
+    minpos <- 1 + k + 5
+    maxpos <- 1 + k + 6
+    
+    est$est.value[par %in% c(minpos, maxpos) & par.state == 1] <- NA
+    
+    diff <- ifelse(true$true.value == 0, (est$est.value - true$true.value)/2*pi, (est$est.value - true$true.value)/true$true.value)
+    
+    df <- data.frame(par = par, diff = diff, state = par.state, noise = noise)
+    
+    return(df)
+  }) %>% reduce(rbind) 
+  
+  N <- as.factor(rep(c("500", "2500", "10000"), each = nrow(out)/3))
+  out$N <- N
+  levels(out$state) <- paste0("State ", levels(out$state))
+  
+  noise.scale <- paste(1:5, round(1/seq(0.1, 10, length.out = 5), 2), sep = "\n")
+  
+  #return(out)
+  
+  p <- ggplot(data = na.omit(out), aes(x = noise, y = abs(diff), color = par)) + geom_smooth() +
+    facet_wrap(vars(state)) +
+    scale_color_viridis_d(name = "Estimated\nparameter", labels = names.pars.est) +
+    scale_x_continuous(name = "Noise", labels = noise.scale) +
+    scale_y_continuous(name = "Absolute proportional deviation", limits = c(0, 5))
   
   return(p)
 })
@@ -516,8 +606,8 @@ plots.acc.234 <- lapply(1:3, function(y, data) {
            k = as.factor(rep(2:4, each = 3))) %>%
     pivot_longer(names(x), names_to = "par.est", values_to = "accuracy")
   
-  p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
-    geom_boxplot(outlier.shape = 4) + 
+  p <- ggplot(data = data.long, aes(x = k, y = accuracy, fill = cond)) +
+    geom_boxplot(color = "black", outlier.shape = 4) + 
     scale_x_discrete(name = "k (number of states)")  + 
     scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
   
@@ -532,7 +622,7 @@ plots.acc.234 <- lapply(1:3, function(y, data) {
     label.cond <- "Number of\nintervals"
   }
   
-  p <- p + scale_color_viridis_d(name = label.cond, labels = names.cond)
+  p <- p + scale_fill_viridis_d(name = label.cond, labels = names.cond)
   
   return(p)
 }, data = acc.data.234)
@@ -577,7 +667,7 @@ plots.acc.int.24 <- lapply(c(1, 3), function(y, data) {
   p <- p + scale_color_discrete(name = label.cond, labels = names.cond) +
     scale_x_continuous(name = x.name) + 
     scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1)) +
-    scale_color_viridis_d()
+    scale_color_viridis_d(name = label.cond, labels = names.cond)
   
   return(p)
 }, data = acc.data.234)
@@ -666,15 +756,15 @@ plots.acc.expl <- lapply(1, function(y, data) {
            k = as.factor(rep(2:4, each = 3))) %>%
     pivot_longer(names(x), names_to = "par.est", values_to = "accuracy")
   
-  p <- ggplot(data = data.long, aes(x = k, y = accuracy, color = cond)) +
-    geom_boxplot(outlier.shape = 4) + 
+  p <- ggplot(data = data.long, aes(x = k, y = accuracy, fill = cond)) +
+    geom_boxplot(color = "black", outlier.shape = 4) + 
     scale_x_discrete(name = "k (number of states)")  + 
     scale_y_continuous(name = "Cohen's kappa", breaks = c(-1, -0.33, 0, 0.25, 0.5, 0.75, 1))
   
   names.cond <- c("1", "2", "3")
   label.cond <- bquote(tau["start"])
   
-  p <- p + scale_color_viridis_d(name = label.cond, labels = names.cond)
+  p <- p + scale_fill_viridis_d(name = label.cond, labels = names.cond)
   
   return(p)
 }, data = labsw.df)
@@ -718,6 +808,36 @@ print(plots.acc.1[[1]])
 
 ```
 
+## Addendum Part Two
+This section describes how we exploratorily examined the recovery of parameters depending on the amount of noise added to the data. Figure \@ref(fig:plot-noise-2-2) shows the trends in absolute proportional deviation between estimated and true parameters (i.e., $\text{abs}((\hat{\theta}_i - \theta_i)/\theta_i)$) for the two-state HMM. We observed that the that the deviation is low for most parameters and does not change with increased noise. Exceptions were the scale parameters of the gamma distributions in both states, which started around 0.6 and almost linearly increased (with a plateau at the end) until 2.5 absolute proportional deviation when the noise level rose. In light of the previously adopted scale for RMdSPD, we conclude that these parameters are badly recovered across all noise levels (i.e., they are higher than 0.5). Conversely, for the parameters of the von Mises distribution in state two, the deviation exponentially declined with increasing noise, starting from 1 and ending at almost 0. The exponential decline occurs because we manipulated the noise for values generated by the von Mises distribution on the inverse scale. Thus, for high noise the von Mises parameters are badly recovered, whereas for lower levels of noise they are well recovered.  
+Figure \@ref(fig:plot-noise-2-3) shows a similar pattern for the three-state HMM. In contrast to the previous model, the mean parameter of the von Mises distribution in state two exhibited increased deviation for lower noise levels. Moreover, the deviations for transition probabilities from state two to state three increased slightly with higher noise.  
+The trends for the HMM with four states are shown in Figure \@ref(fig:plot-noise-2-4). States two and three behave similarly as in the previous model, except that the probabilities to transition to state one are initially high and decrease with higher levels of noise. For state one, the trends are almost indistinguishable from each other and do not visibly change with the noise level. State 4 still shows an increasing trend for the scale parameters and decreasing trends for transition probabilities towards states one and three.  
+In conclusion, this exploratory analysis showed that the scale parameters of the gamma distributions were already badly disturbed by small amounts of noise. Parameters of the von Mises distributions were susceptible to deviations through large noise levels but recovered well for lower noise levels.
+
+(ref:plot-noise-2-2) Absoluted proportional deviation between estimated and true parameters of the two-state HMM depending on noise level in part two of the simulation. The upper labels on the x-axis indicate $\tau_{noise}$ and the lower labels $\kappa_{noise}$. Colours indicate for which estimated parameter and top facet labels for which state the deviation is displayed. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-noise-2-2, fig.cap="(ref:plot-noise-2-2)"}
+
+print(plot.par.noise[[1]])
+
+```
+
+(ref:plot-noise-2-3) Absoluted proportional deviation between estimated and true parameters of the three-state HMM depending on noise level in part two of the simulation. The upper labels on the x-axis indicate $\tau_{noise}$ and the lower labels $\kappa_{noise}$. Colours indicate for which estimated parameter and top facet labels for which state the deviation is displayed. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-noise-2-3, fig.cap="(ref:plot-noise-2-3)"}
+
+print(plot.par.noise[[2]])
+
+```
+
+(ref:plot-noise-2-4) Absoluted proportional deviation between estimated and true parameters of the four-state HMM depending on noise level in part two of the simulation. The upper labels on the x-axis indicate $\tau_{noise}$ and the lower labels $\kappa_{noise}$. Colours indicate for which estimated parameter and top facet labels for which state the deviation is displayed. $\rho_i$ is the initial probability for state *i* (indicated by the top facet label), $a_{ij}$ is the probability to transition from state *i* to state *j*, $\alpha$ and $\beta$ are the shape and scale parameters of the gamma distributions, and $\mu$ and $\kappa$ are the mean and concentration parameter of the von Mises distribution.
+
+```{r plot-noise-2-4, fig.cap="(ref:plot-noise-2-4)"}
+
+print(plot.par.noise[[3]])
+
+```
+
 ## Part Three
 The third part of the simulation investigated how increasing the variation in generating starting values affected parameter recover and accuracy of the HMM. For the two-state HMM, all parameters displayed RMdSPDs lower than 0.1 (see Figure \@ref(fig:plot-rmdspd-3-2)), suggesting good recovery. Cohen's kappa values were slightly lower than 1, indicating almost perfect accuracy (see Figure \@ref(fig:plot-acc-3)). For the three-state HMM, RMdSPDs were lower than 0.1 except for $a_{12}$ and $a_{31}$, which were below 0.5 (see Figure \@ref(fig:plot-rmdspd-3-3)), which means they were moderately well recovered. As in previous parts, Cohen's kappa values were mostly above 0.95 (almost perfect accuracy) with exceptions clustering around zero and -0.33 (see Figure \@ref(fig:plot-acc-3)). Regarding the four state-HMM, RMdSPDs of transition probabilities for states one and four were clustered above 0.1, other estimated parameters in the model showed values below 0.1 (see Figure \@ref(fig:plot-rmdspd-3-4)). The HMM showed substantial to almost perfect accuracy, as Cohen's kappa values were mostly above 0.8 with a few values clustering around 0.6, 0.25, and zero (see Figure \@ref(fig:plot-acc-3)). Taken together, increasing the variation in starting values for parameter estimation did neither affect the parameter recovery nor the accuracy.  
 
@@ -725,7 +845,7 @@ The third part of the simulation investigated how increasing the variation in ge
 
 ```{r plot-rmdspd-3-2, fig.cap="(ref:plot-rmdspd-3-2)"}
 
-print(plots.rmsd.234[[2]][[1]] + coord_flip())
+print(plots.rmsd.234[[2]][[1]])
 
 ```
 
@@ -741,7 +861,7 @@ print(plots.acc.234[[2]])
 
 ```{r plot-rmdspd-3-3, fig.cap="(ref:plot-rmdspd-3-3)"}
 
-print(plots.rmsd.234[[2]][[2]] + coord_flip())
+print(plots.rmsd.234[[2]][[2]])
 
 ```
 
@@ -749,7 +869,7 @@ print(plots.rmsd.234[[2]][[2]] + coord_flip())
 
 ```{r plot-rmdspd-3-4, fig.cap="(ref:plot-rmdspd-3-4)"}
 
-print(plots.rmsd.234[[2]][[3]] + coord_flip())
+print(plots.rmsd.234[[2]][[3]])
 
 ```
 
@@ -770,7 +890,7 @@ In the last part, data intervals of varying length were set to be missing. Regar
 
 ```{r plot-rmdspd-4-2, fig.cap="(ref:plot-rmdspd-4-2)"}
 
-print(plots.rmsd.234[[3]][[1]] + coord_flip())
+print(plots.rmsd.234[[3]][[1]])
 
 ```
 
@@ -778,7 +898,7 @@ print(plots.rmsd.234[[3]][[1]] + coord_flip())
 
 ```{r plot-rmdspd-4-3, fig.cap="(ref:plot-rmdspd-4-3)"}
 
-print(plots.rmsd.234[[3]][[2]] + coord_flip())
+print(plots.rmsd.234[[3]][[2]])
 
 ```
 
@@ -786,7 +906,7 @@ print(plots.rmsd.234[[3]][[2]] + coord_flip())
 
 ```{r plot-rmdspd-4-4, fig.cap="(ref:plot-rmdspd-4-4)"}
 
-print(plots.rmsd.234[[3]][[3]] + coord_flip())
+print(plots.rmsd.234[[3]][[3]])
 
 ```
 
