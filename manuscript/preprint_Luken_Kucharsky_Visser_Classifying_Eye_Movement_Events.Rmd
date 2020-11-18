@@ -18,13 +18,15 @@ affiliation:
     institution   : "Department of Psychology, University of Amsterdam. Amsterdam, The Netherlands"
 
 authornote: |
+ *Please note that this is a preprint and has not been certified by peer review*.
+ 
  We would like to thank Daan van Renswoude, Maartje Raijmakers, and Maximilian Maier for their helpful comments on earlier versions of this paper. Furthermore, we would like to acknowledge feedback by Karel Veldkamp and Phil Norberts in the early stage of this project. Šimon Kucharský was supported by the NWO (Nederlandse Organisatie voor Wetenschappelijk Onderzoek) grant no. 406.10.559.
 
 abstract: |
  Eye-tracking allows researchers to infer cognitive processes from eye movements that are classified into distinct events. Parsing the events is typically done by algorithms. Previous algorithms have successfully used hidden Markov models (HMMs) for classification but can still be improved in several aspects. To address these aspects, we developed gazeHMM, an algorithm that uses an HMM as a generative model, has no critical parameters to be set by users, and does not require human coded data as input. The algorithm classifies gaze data into fixations, saccades, and optionally postsaccadic oscillations and smooth pursuits. We evaluated gazeHMM’s performance in a simulation study, showing that it successfully recovered HMM parameters and hidden states. Parameters were less well recovered when we included a smooth pursuit state and/or added even small noise to simulated data. We applied generative models with different numbers of events to benchmark data. Comparing them indicated that HMMs with more events than expected had most likely generated the data. We also applied the full algorithm to benchmark data and assessed its similarity to human coding. For static stimuli, gazeHMM showed high similarity and outperformed other algorithms in this regard. For dynamic stimuli, gazeHMM tended to rapidly switch between fixations and smooth pursuits but still displayed higher similarity than other algorithms. Concluding that gazeHMM can be used in practice, we recommend parsing smooth pursuits only for exploratory purposes. Future HMM algorithms could use covariates to better capture eye movement processes and explicitly model event durations to classify smooth pursuits more accurately.
   
 keywords          : "eye-tracking; event detection; parameter recovery; dependent mixture models"
-wordcount         : "10327"
+wordcount         : "10279"
 
 bibliography      : "references.bib"
 
@@ -79,6 +81,8 @@ fr <- 500
 
 ```
 
+\raggedbottom
+
 # Introduction
 Eye-tracking is typically used to study cognitive processes involving attention and information search based on recorded gaze position [@Schulte-Mecklenbeck2017]. Before these processes can be studied, the raw gaze data is classified into events that are distinct in their physiological patterns (e.g., duration), underlying neurological mechanisms, or cognitive functions [@Leigh2015]. Basic events are fixations, saccades, smooth pursuits, and post-saccadic oscillations (PSOs). Classifying raw eye-tracking data into these events reduces their complexity and is usually the first step towards cognitive interpretation [@Salvucci2000]. The classification is typically done by algorithms, which is considered faster, more objective, and reproducible compared to human coding [@Andersson2017]. @Hein2017 give a comprehensive overview of different classification algorithms [for a structured review on classifying saccades, see also @Stuart2019].  
 To motivate our decision to add another algorithm to this array of classification tools, we first need to distinguish between the different classes of methods they use. On one hand, many classification algorithms use non-parametric methods to differentiate between eye movement events. A classic example is the "Velocity-threshold" algorithm [@Stampe1993], which classifies samples with a velocity above a fixed threshold as saccades [see also @Nystrom2010; @Larsson2013; @Larsson2015]. On the other hand, many parametric methods have been developed recently. Some of them require human-labeled training data as input and can therefore be termed as *supervised* [@Hastie2017]. For example, @Bellet2019 trained a convolutional neural network (CNN) on eye-tracking data from humans and macaques and achieved classification results that were similarly accurate to those of human coders [see also @Zemblys2018; @Zemblys2019; @Startsev2019]. Despite their accuracy, the requirement of labeled training data is a disadvantage of supervised methods because the labeling process can easily become costly and time-consuming [@Zemblys2019]. Supervised methods also (implicitly) treat human-labeled training data as a gold standard, an assumption that may be unwarranted [see discussion in @Hooge2018]. In contrast, *unsupervised* classification algorithms do not require labeled training input. Instead, they learn parameters from the characteristics of the data themselves [@Hastie2017]. In consequence, they are also more flexible in classifying data from different individuals, tasks, or eye-trackers [e.g., @Houpt2018; @Hessels2017].  
@@ -98,7 +102,7 @@ As illustrated in Figure \@ref(fig:plot-algorithm-workflow), most eye movement e
 
 (ref:plot-algorithm-workflow) Example workflow for eye movement event classification algorithms: (a) the raw gaze signal in x (dark red) and y (dark blue) coordinates; (b) the raw gaze signal is filtered and transformed into a velocity signal; (c) samples are classified as events (indicated by colors), and (d) relabeled. Sequences of samples belonging to the same event are merged (indicated by black segments). Data from @Andersson2017.
 
-```{r plot-algorithm-workflow, fig.cap="(ref:plot-algorithm-workflow)", fig.height = 8}
+```{r plot-algorithm-workflow, fig.cap="(ref:plot-algorithm-workflow)", fig.height = 7}
 
 toPlot <- A2017[[3]][[3]] %>%
   mutate(x.va = px2va(x, dim[1], res[1], dist),
@@ -123,17 +127,17 @@ p1 <- ggplot(toPlot, aes(x = t, x.va)) +
 p2 <- ggplot(toPlot, aes(x = t, y = vel)) + 
   geom_line() + 
   geom_point(size = 2) +
-  scale_y_continuous(name = "Velocity (deg/s)", limits = c(0, 250), breaks = pretty(c(0, 250)))
+  scale_y_continuous(name = "Velocity (deg/s)", limits = c(0, 300), breaks = c(0, 100, 200, 300))
 
 p3 <- ggplot(toPlot, aes(x = t, y = vel)) + 
   geom_line() + 
   geom_point(aes(color = event.pre), size = 2) +
-  scale_y_continuous(name = "Velocity (deg/s)", limits = c(0, 250), breaks = pretty(c(0, 250)))
+  scale_y_continuous(name = "Velocity (deg/s)", limits = c(0, 300), breaks = c(0, 100, 200, 300))
 
 p4 <- ggplot(toPlot, aes(x = t, y = vel)) + 
   geom_line() + 
   geom_point(aes(color = event.post), size = 2) +
-  scale_y_continuous(name = "Velocity (deg/s)", limits = c(0, 250), breaks = pretty(c(0, 250)))
+  scale_y_continuous(name = "Velocity (deg/s)", limits = c(0, 300), breaks = c(0, 100, 200, 300))
 
 plotList <- list(p1, p2, p3, p4)
 
@@ -209,13 +213,17 @@ In the first part, we varied the parameters of the HMM. For models with $k \in \
 We defined approximate ranges for each response variable (see supplementary material) and chose true parameter intervals and default values so that they produced samples that roughly corresponded to these ranges. Tables \@ref(tab:sim-parameters-trans) and \@ref(tab:sim-parameters-resp) show the intervals and default values for each parameter in the simulation. Parameters were scaled down by factor 10 (compared to the reported ranges) to improve fitting of the gamma distributions. We set the intervals for shape parameters of the gamma distributions for all events to [1,5] to examine how skewness influenced the recovery (shape values above five approach a symmetric distribution). The scale parameters were set so that the respective distribution approximately matched the assumed ranges. Since the concentration parameters of the von Mises distribution are the inverse of standard deviations, they were varied on the inverse scale.  
 In the second part, we manipulated the sample size of the generated data and the amount of noise added to it. The model parameters were set to their default values. For models with $k \in \{2, 3, 4\}$ states and sample sizes of $N \in \{500, 2500, 10000\}$, we generated 100 data sets ($100 \times 3 \times 3 = 900$ recoveries). These sample sizes roughly match small, medium, and large eye-tracking data sets for a single participant and trial (e.g., with a frequency of 500 Hz, the sample sizes would correspond to recorded data with lengths of 1 s, 5 s, and 20 s, respectively). To simulate noise, we replaced velocity and acceleration values $y$ with draws from a gamma distribution with $\alpha_{noise} = 3$ and $\beta_{noise}=(y/2)\tau_{noise}$ with $\tau_{noise} \in [1,5]$ varying between data sets. This procedure ensured that velocity and acceleration values remained positive and were taken from moderately skewed distributions with modes equal to the original values. To angle, we added white noise from a von Mises distribution with $\mu_{noise} = 0$ and $\kappa_{noise} \in 1/[0.1,10]$ varying between data sets. $\tau_{noise}$ and $\kappa_{noise}$ were increased simultaneously in equidistant steps in their intervals.
 
+(ref:sim-parameters-trans) Intervals and Default Parameter Values for the Transition Model in the Simulation
+(ref:sim-parameters-trans-note) The initial state probability is denoted by $\rho_i$. The transition probability for staying in the same state is denoted by $a_{i=j}$ and the probability for switching to a different state by $a_{i\neq j}$. The number of states in the model is denoted by *k*.
+
 ```{r sim-parameters-trans}
 
-sim.pars.trans <- as.data.frame(matrix(c("Interval", "-", "[.01,.99]", "1-a(i=j)/(k-1)",
+sim.pars.trans <- as.data.frame(matrix(c("Interval", "-", "[0.01,0.99]", "(1-a(i=j))/(k-1)",
                                            "Default", "1/k", "0.9", "0.1/(k-1)"), nrow = 2, byrow = T))
 
 apa_table(sim.pars.trans,
-          col.names = c("", "Initial\nstate\nprob.", "Trans. prob.\nsame state", "Trans. prob.\nother state"),
+          align = "c",
+          col.names = c("", "$\\rho_i$", "$a_{i=j}$", "$a_{i \\neq j}$"),
           caption = "(ref:sim-parameters-trans)",
           note = "(ref:sim-parameters-trans-note)")
 
@@ -236,7 +244,8 @@ sim.pars.resp <- as.data.frame(t(matrix(c("[1,5]", "[0.1,0.6]", "[1,5]", "[0.05,
                                   "3", "1", "3", "0.15", "0", "1"), nrow = 6, byrow = F)))
 
 apa_table(cbind(rep(c("Interval", "Default"), 4), sim.pars.resp),
-          col.names = c("", "Shape", "Scale", "Shape", "Scale", "Mean", "Concentration"),
+          align = "c",
+          col.names = c("", "$\\alpha$", "$\\beta$", "$\\alpha$", "$\\beta$", "$\\mu$", "$\\kappa$"),
           col_spanners = list(Velocity = c(2, 3), Acceleration = c(4, 5), "Rel. angle" = c(6, 7)),
           stub_indents = list("State 1" = c(1, 2), "State 2" = c(3, 4), "State 3" = c(5, 6), "State 4" = c(7, 8)),
           caption = "(ref:sim-parameters-resp)",
@@ -258,9 +267,6 @@ where $\theta_i$ is the true parameter value and $\hat{\theta}_i$ is the estimat
 Additionally, we applied a bivariate linear regression with the estimated parameter values as the dependent and the true parameter values as the independent variable to each parameter that has been varied on an interval in part one. Regression slopes closer to one indicated that the model better captured parameter change. Regression intercepts different from zero reflected a bias in parameter estimation.  
 To assess state recovery, we computed Cohen's kappa (for all events taken together, not for each event separately) as a measure of agreement between true and estimated states for each generated data set. Cohen's kappa estimates the agreement between two classifiers accounting for the agreement due to chance. Higher kappa values were interpreted as better model accuracy. We adopted the ranges proposed by @Landis1977 to interpret kappa values.
 Models that could not be fitted were excluded from the recovery.
-
-(ref:sim-parameters-trans) Intervals and Default Parameter Values for the Transition Model in the Simulation
-(ref:sim-parameters-trans-note) The transition probability for staying in the same state is denoted by $a_{i=j}$ and the probability for switching to a different state by $a_{i\neq j}$. The number of states in the model is denoted by *k*.
 
 ```{r load sim results and helper functions, include=FALSE}
 
@@ -1017,7 +1023,7 @@ To validate gazeHMM, we applied the algorithm on two benchmark data sets. As sta
 [^7]: Scaling down by factor 100 differs from the simulation study (scaling down by 10). The algorithm allows the user to manually specify this factor, and in this case, factor 100 led to better model fits than factor 10.
 
 (ref:tab-starting-values) Starting Values for the Response Model for Fitting gazeHMM to Benchmark Data
-(ref:tab-starting-values-note) Starting values for velocity and acceleration signals are shown before scaling down by factor 100.
+(ref:tab-starting-values-note) Starting values for velocity and acceleration signals are shown before scaling down by factor 100. Shape parameters are denoted by $\alpha$, scale parameters by $\beta$, mean parameters by $\mu$, and concentration parameters by $\kappa$.
 
 ```{r tab-starting-values}
 
@@ -1027,10 +1033,12 @@ tab.start <- as.data.frame(matrix(c(10, 10, 10, 10, NA, NA,
                       20, 20, 20, 20, 0, 10,
                       20, 20, 50, 50, 0, 10), nrow = 5, byrow = T))
 
-colnames(tab.start) <- c("Shape", "Scale", "Shape", "Scale", "Mean", "Concentration")
+#colnames(tab.start) <- c("$\\alpha$", "$\\beta$", "$\\alpha$", "$\\beta$", "$\\mu$", "$\\kappa$")
 rownames(tab.start) <- c("Fixation", "Saccade", "PSO", "Pursuit", "Event 5")
 
 apa_table(as.data.frame(tab.start),
+          align = "c",
+          col.names = c("", "$\\alpha$", "$\\beta$", "$\\alpha$", "$\\beta$", "$\\mu$", "$\\kappa$"),
           col_spanners = list(Velocity = c(2, 3), Acceleration = c(4, 5), "Rel. angle" = c(6, 7)),
           format.args = list(na_string = "-", drop0trailing = T),
           caption = "(ref:tab-starting-values)",
@@ -1509,9 +1517,9 @@ apa_table(A2017.conf,
 
 ```
 
-(ref:plot-example-classification) Example data from @Andersson2017 displayed as x-, and y-coordinates, velocity (in deg/s), acceleration (in deg/s$^2$), and sample-to-sample (relative) angle (in rad). Colors indicate classification by gazeHMM and symbols by human coder MN. Note that the human coder classified all fixations by gazeHMM as smooth pursuits and delayed the separation between the saccade and PSO.
+(ref:plot-example-classification) Example data from @Andersson2017 displayed as x-, and y-coordinates (in deg), velocity (in deg/s), acceleration (in deg/s$^2$), and sample-to-sample (relative) angle (in rad). Colors indicate classification by gazeHMM and symbols by human coder MN. Note that the human coder classified all fixations by gazeHMM as smooth pursuits and delayed the separation between the saccade and PSO.
 
-```{r plot-example-classification, fig.cap="(ref:plot-example-classification)", fig.height=7.5}
+```{r plot-example-classification, fig.cap="(ref:plot-example-classification)", fig.height=7}
 
 cbind(A2017.fit[[3]][[3]][[4]]$samples, coderMN = as.factor(A2017[[3]][[3]]$coderMN)) %>% 
   gather(c("x", "y", "vel", "acc", "angle"), key = metric, value = value, factor_key = T) %>% 
@@ -1556,28 +1564,6 @@ Lastly, allowing constrained parameters in the HMM could replace some of the pos
 
 ## Conclusion
 In the previous sections, we developed and tested a generative, HMM-based algorithm called gazeHMM. Both a simulation and validation study showed that gazeHMM is a suitable algorithm for classifying eye movement events. For smooth pursuits, the classification is not optimal and thus not yet recommended. On one side, the algorithm has some advantages over concurrent event classification algorithms, not relying on human-labeled training data being the most important one. On the other side, it is not able to perform model comparisons as expected and still poses difficulties regarding good model specifications for different eye movement events. These difficulties highlight challenges for HMMs in general but also specifically for eye movements.
-
-# Declarations
-## Funding
-Šimon Kucharský was supported by the NWO (Nederlandse Organisatie voor Wetenschappelijk Onderzoek) grant no. 406.10.559.
-
-## Conflicts of Interest
-The authors declare that they have no financial or non-financial interests regarding the content of this article.
-
-## Ethics Approval
-Not applicable.
-
-## Consent to Participate
-Not applicable.
-
-## Consent to Publication
-Not applicable.
-
-## Availability of Data and Materials
-See Open Practices and Data Availability Statement.
-
-## Code Availability
-See Open Practices and Data Availability Statement. 
 
 # Open Practices and Data Availability Statement
 The data and materials for the validation study [@Andersson2017; @Ehinger2019; @Larsson2013; @Larsson2015] are available on GitHub at <https://github.com/richardandersson/EyeMovementDetectorEvaluation> and on Figshare at <https://doi.org/10.6084/m9.figshare.c.4379810.v1>. The code to obtain the results for the simulation and validation study is available at <https://github.com/maltelueken/gazeHMM_validation> and the algorithm can be accessed at <https://github.com/maltelueken/gazeHMM>. The simulation study was preregistered (<https://doi.org/10.17605/OSF.IO/VDJGP>), whereas the validation study was not.
