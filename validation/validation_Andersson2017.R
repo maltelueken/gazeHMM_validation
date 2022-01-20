@@ -1,7 +1,7 @@
 ### Validation Andersson et al. (2017) ###
 
 # Author: Malte Lüken
-# Date:17.05.2020
+# Date: 17.05.2020
 
 library(tidyverse)
 library(depmixS4)
@@ -9,6 +9,7 @@ library(parallel)
 library(R.matlab)
 library(psych)
 library(signal)
+library(here)
 
 source("algorithm/gazeHMM.R")
 source("algorithm/model_helper_functions.R")
@@ -67,7 +68,7 @@ onestate_HMM <- function(data, respstart, sf = c(10, 10), random.respstart = T, 
 }
 
 
-# Load data
+# Load raw data
 
 A2017 <- list()
 
@@ -91,6 +92,85 @@ for(i in c("dots", "img", "video")) {
   }, x = data.MN, y = data.RA)
 }
 
+
+# Load algorithm classification data
+
+events <- readMat(here("validation/data/20150807.mat"))$topResult[1:3,,]
+
+names(events) <- c("img", "dots", "video")
+
+
+# Remove two data sets from dots condition
+
+A2017[["dots"]] <- A2017[["dots"]][-c(10, 11)]
+events[["dots"]] <- array(events[["dots"]][,,-c(10, 11)], c(13, 1, 9))
+
+alg.names <- names(events[[1]][,1,1])
+
+
+# Merge raw data with algorithm classification
+
+A2017 <- lapply(names(A2017), function(x) {
+  
+  MN <- lapply(A2017[[x]], function(y) {y$label_MN})
+  RA <- lapply(A2017[[x]], function(y) {y$label_RA})
+  
+  MN.ev <- lapply(1:length(A2017[[x]]), function(y) {
+    as.data.frame(events[[x]][,,y] %>% reduce(cbind))[,1]
+  })
+  RA.ev <- lapply(1:length(A2017[[x]]), function(y) {
+    as.data.frame(events[[x]][,,y] %>% reduce(cbind))[,2]
+  })
+  
+  comp <- list(MN, MN.ev, RA, RA.ev)
+  
+  same <- lapply(1:length(comp[[1]]), function(y) {
+    
+    all.true <- sapply(1:length(comp[[2]]), function(z) {
+      
+      all(comp[[1]][[y]] == comp[[2]][[z]])
+
+    })
+    
+    sum.false <- sapply(1:length(comp[[2]]), function(z) {
+      
+      sum.false <- sum(comp[[1]][[y]] != comp[[2]][[z]])
+
+    })
+    
+    if(all.true > 0) {
+      which(all.true == TRUE)
+    } else {
+      which.min(sum.false)
+    }
+  })
+  
+  lapply(1:length(A2017[[x]]), function(y) {
+    
+    toMerge <- as.data.frame(events[[x]][,,same[[y]]] %>% reduce(cbind))
+    
+    names(toMerge) <- alg.names
+    
+    out <- cbind(A2017[[x]][[y]][1:length(comp[[2]][[same[[y]]]]),], toMerge)
+    
+    print(all(out[,6] == out[,8]))
+    
+    if(all(is.nan(out$t) || out$t == 0)) {
+      
+      out$t <- seq(0, length(out$t)-1)/500
+      
+    } else {
+      
+      out$t <- (out$t - out$t[1])/1e6
+      
+      out <- out[out$t >= 0,]
+      
+    }
+    
+    return(out[-c(6, 7)])
+  })
+})
+
 save(A2017, file = here("validation/Andersson2017_raw.Rdata"))
 
 
@@ -110,18 +190,6 @@ A2017.fit <- lapply(1:length(A2017), function(stim) parLapply(clust, 1:length(A2
   data.seed <- stim*1e4 + subj*1e2
   
   df <- A2017[[stim]][[subj]]
-  
-  if(all(is.nan(df$t) || df$t == 0)) {
-    
-    df$t <- seq(0, length(df$t)-1)/fr
-      
-  } else {
-    
-    df$t <- (df$t - df$t[1])/1e6
-    
-    df <- df[df$t >= 0,]
-    
-  }
   
   fit <- list()
   
