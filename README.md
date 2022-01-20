@@ -16,5 +16,12 @@ The preprint manuscript can be reproduced by running *preprint_Luken_Kucharsky_V
 - Raw data and fitted algorithm data for the Andersson et al. (2017) data set: Those can be obtained by placing the data of the original article in *validation/data* and running *validation_Andersson2017.R*
 - Fitted algorithm data for the Ehinger et al. (2019) data set, which can be obtained by placing the .EDF (EyeLink) files of the original article in *validation/data* and running *validation_Ehinger2019.R*
 
+## References
+The references for the two validation data sets are:
+
+Andersson, R., Larsson, L., Holmqvist, K., Stridh, M., & Nyström, M. (2017). One algorithm to rule them all? An evaluation and discussion of ten eye movement event-detection algorithms. *Behavior Research Methods, 49*, 616-637. <https://doi.org/10.3758/s13428-016-0738-9>
+
+Ehinger, B. V., Groß, K., Ibs, I., König, P. (2019). A new comprehensive eye-tracking test battery concurrently evaluating the Pupil Labs glasses and the EyeLink 1000. *PeerJ 7*, e7086. <https://doi.org/10.7717/peerj.7086>
+
 ***
 Check out the R package for gazeHMM under https://github.com/maltelueken/gazeHMM!
